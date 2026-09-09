@@ -1,0 +1,119 @@
+name: "WinCC OA Syntax Check"
+description: "Run WinCC OA syntax validation using @winccoa-tools-pack/npm-winccoa-syntax-check inside a WinCC OA Docker image"
+author: "winccoa-tools-pack"
+
+inputs:
+  path:
+    description: "Path to WinCC OA project root relative to the repository root"
+    required: false
+    default: "."
+
+  fail-on-error:
+    description: "Fail workflow on syntax errors"
+    required: false
+    default: "true"
+
+  winccoa-version:
+    description: "WinCC OA version installed in the image, for example 3.21"
+    required: false
+    default: ""
+
+  languages:
+    description: "Optional newline-separated list of languages to include in generated config (one per line)"
+    required: false
+    default: "en_US.utf8"
+
+  register-project:
+    description: "Whether to call the local `winccoa-register-project` action before running the syntax check"
+    required: false
+    default: "true"
+
+  mode:
+    description: "Check mode: all, scripts, panels"
+    required: false
+    default: "all"
+
+  integrity:
+    description: "If true, performs integrity check"
+    required: false
+    default: "false"
+
+  timeout-ms:
+    description: "Timeout in milliseconds"
+    required: false
+    default: "60000"
+
+outputs:
+  error-count:
+    description: "Number of detected syntax errors"
+    value: ${{ steps.run.outputs.error-count }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Register project (optional)
+      if: ${{ inputs.register-project == 'true' && inputs.languages != '' }}
+      uses: ./actions/winccoa-register-project
+      with:
+        project-path: ${{ inputs.path }}
+        languages: ${{ inputs.languages }}
+        winccoa-version: ${{ inputs.winccoa-version }}
+
+    - name: Prepare and run syntax check
+      id: run
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.path }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        OA_VERSION: ${{ inputs.winccoa-version }}
+        MODE: ${{ inputs.mode }}
+        INTEGRITY: ${{ inputs.integrity }}
+        TIMEOUT_MS: ${{ inputs.timeout-ms }}
+        REGISTER_PROJECT: ${{ inputs.register-project }}
+        LANGUAGES: ${{ inputs.languages }}
+      run: |
+        set -euo pipefail
+
+        # registration is performed by a separate step when requested
+
+        # Node.js and npm must be provided by the workflow/runner.
+        # Do not attempt to install Node.js here; let the caller ensure correct versions.
+        if ! command -v node >/dev/null 2>&1 || ! command -v npm >/dev/null 2>&1; then
+          echo "::error::node/npm not available. Ensure Node.js and npm are installed in the runner or container."
+          exit 127
+        fi
+
+        # Install syntax-check helper and run
+        npm install -g @winccoa-tools-pack/npm-winccoa-syntax-check@latest
+
+        CONFIG_FULL_PATH="${GITHUB_WORKSPACE}/${PROJECT_PATH}/config/config"
+        ARGS=("-m" "${MODE}" "-t" "${TIMEOUT_MS}")
+        if [ -n "${OA_VERSION}" ]; then
+          ARGS+=("-v" "${OA_VERSION}")
+        fi
+        ARGS+=("-c" "${CONFIG_FULL_PATH}")
+        if [ "${INTEGRITY}" = "true" ]; then
+          ARGS+=("-i")
+        fi
+
+        set +e
+        OUTPUT=$(winccoa-syntax-check "${ARGS[@]}" 2>&1)
+        EXIT_CODE=$?
+        set -e
+
+        echo "--- Syntax check output ---"
+        printf '%s\n' "$OUTPUT"
+        echo "--- end output ---"
+
+        ERROR_COUNT=$(printf '%s\n' "$OUTPUT" | grep -E ".+:[0-9]+: " -c || true)
+        echo "error-count=${ERROR_COUNT}" >> "$GITHUB_OUTPUT"
+
+        if [ "$EXIT_CODE" -ne 0 ]; then
+          MESSAGE="Syntax check failed (exit $EXIT_CODE). Parsed errors: $ERROR_COUNT"
+          if [ "$FAIL_ON_ERROR" = "true" ]; then
+            echo "::error::$MESSAGE"
+            exit "$EXIT_CODE"
+          fi
+
+          echo "::warning::$MESSAGE"
+        fi
