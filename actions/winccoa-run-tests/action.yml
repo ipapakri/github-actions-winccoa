@@ -23,11 +23,6 @@ inputs:
     description: "WinCC OA version (e.g., 3.21)"
     required: true
 
-  pmon-port:
-    description: "PMON port number"
-    required: false
-    default: "5999"
-
   upload-artifacts:
     description: "Upload failed tests and results as artifacts"
     required: false
@@ -70,7 +65,6 @@ runs:
         TEST_PROJECT_PATH: ${{ inputs.test-project-path }}
         LANGUAGES: ${{ inputs.languages }}
         WINCCOA_VERSION: ${{ inputs.winccoa-version }}
-        PMON_PORT: ${{ inputs.pmon-port }}
       run: |
         set -euo pipefail
         
@@ -94,8 +88,14 @@ runs:
         proj_path = "/opt/WinCC_OA/${WINCCOA_VERSION}/TestFramework_${WINCCOA_VERSION}"
         proj_path = "${TEST_PROJECT_PATH}"
         proj_version = "${WINCCOA_VERSION}"
-        langs = "${LANGUAGES}"
-        pmonPort = ${PMON_PORT}
+        EOF
+        
+        # Add langs lines (one per language)
+        for lang in ${LANGUAGES}; do
+          echo "langs = \"${lang}\"" >> "${CONFIG_FILE}"
+        done
+        
+        cat >> "${CONFIG_FILE}" <<EOF
         [testFramework]
         installPath = "${TEST_PROJECT_PATH}/"
         EOF
