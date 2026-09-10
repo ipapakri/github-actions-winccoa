@@ -53,7 +53,7 @@ runs:
   steps:
     - name: Register project (optional)
       if: ${{ inputs.register-project == 'true' && inputs.languages != '' }}
-      uses: ./actions/winccoa-register-project
+      uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-register-project@main
       with:
         project-path: ${{ inputs.path }}
         languages: ${{ inputs.languages }}
