@@ -1,0 +1,61 @@
+name: "WinCC OA Register Project"
+description: "Create, configure and register a WinCC OA project configuration file with language support"
+author: "winccoa-tools-pack"
+
+inputs:
+  project-path:
+    description: "Path to the main WinCC OA project directory (e.g., src/Squirt)"
+    required: true
+
+  sub-projects:
+    description: "Optional newline-separated list of sub-project identifiers or paths (one per line). Supports IDs or paths, and IDs may contain spaces."
+    required: false
+    default: ""
+
+
+  languages:
+    description: "Languages to configure, space-separated full locale names (e.g., en_US.utf8 de_AT.utf8)"
+    required: true
+
+  winccoa-version:
+    description: "WinCC OA version (e.g., 3.21)"
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run npm helper to create and register project
+      shell: bash
+      env:
+        PROJECT_PATH: ${{ inputs.project-path }}
+        SUB_PROJECTS: ${{ inputs.sub-projects }}
+        LANGUAGES: ${{ inputs.languages }}
+        WINCCOA_VERSION: ${{ inputs.winccoa-version }}
+      run: |
+        set -euo pipefail
+
+        echo "Installing @winccoa-tools-pack/npm-winccoa-register-project@1.1.0..."
+        npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
+
+        echo "Running winccoa register helper..."
+        CMD=(npx @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
+          --project-path "${PROJECT_PATH}"
+          --languages "${LANGUAGES}"
+        )
+
+        # Convert newline-separated SUB_PROJECTS into repeated --sub-project args
+        if [ -n "${SUB_PROJECTS}" ]; then
+          while IFS= read -r sp || [ -n "${sp}" ]; do
+            # skip empty lines
+            [ -z "${sp}" ] && continue
+            CMD+=(--sub-project "${sp}")
+          done <<< "${SUB_PROJECTS}"
+        fi
+
+        if [ -n "${WINCCOA_VERSION}" ]; then
+          CMD+=(--winccoa-version "${WINCCOA_VERSION}")
+        fi
+
+        echo "Executing: ${CMD[*]}"
+        "${CMD[@]}"
