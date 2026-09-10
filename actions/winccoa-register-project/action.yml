@@ -39,7 +39,8 @@ runs:
         npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
 
         echo "Running winccoa register helper..."
-        CMD=(npx @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
+        # Use -p to ensure the package is available and run the package's declared binary
+        CMD=(npx -p @winccoa-tools-pack/npm-winccoa-register-project@1.1.0 npm-winccoa-register
           --project-path "${PROJECT_PATH}"
           --languages "${LANGUAGES}"
         )
