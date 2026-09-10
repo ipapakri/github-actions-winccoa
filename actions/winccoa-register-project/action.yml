@@ -39,10 +39,12 @@ runs:
         npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
 
         echo "Running winccoa register helper..."
-        # Use -p to ensure the package is available and run the package's declared binary
-        CMD=(npx -p @winccoa-tools-pack/npm-winccoa-register-project@1.1.0 npm-winccoa-register
+        # Install helper into the workspace and invoke its JS entry directly
+        npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
+
+        CMD=(node -e "require('@winccoa-tools-pack/npm-winccoa-register-project').main().catch(e=>{console.error(e);process.exit(1)})" --
           --project-path "${PROJECT_PATH}"
-          --languages "${LANGUAGES}"
+          --langs "${LANGUAGES}"
         )
 
         # Convert newline-separated SUB_PROJECTS into repeated --sub-project args
@@ -55,7 +57,7 @@ runs:
         fi
 
         if [ -n "${WINCCOA_VERSION}" ]; then
-          CMD+=(--winccoa-version "${WINCCOA_VERSION}")
+          CMD+=(--wincc-oa-version "${WINCCOA_VERSION}")
         fi
 
         echo "Executing: ${CMD[*]}"
