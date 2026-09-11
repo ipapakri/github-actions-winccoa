@@ -63,11 +63,29 @@ runs:
 
         echo "Inspecting WinCC OA installation inside image (if available):"
         echo "WINCCOA_IMAGE=${WINCCOA_IMAGE:-<not set>}"
+        SIM_VERSIONS=""
         if command -v docker >/dev/null 2>&1; then
           echo "Listing /opt/WinCC_OA inside image $WINCCOA_IMAGE (may fail if image not present):"
-          docker run --rm "${WINCCOA_IMAGE}" ls -la /opt/WinCC_OA || true
+          # list entries (one per line) and also print full long listing for visibility
+          docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -la /opt/WinCC_OA || true'
+          # capture potential version directories (lines starting with digit like 3.21)
+          VERSIONS_RAW=$(docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -1 /opt/WinCC_OA 2>/dev/null || true') || true
+          if [ -n "${VERSIONS_RAW}" ]; then
+            # filter lines that look like version names (start with digit) and join with commas
+            SIM_VERSIONS=$(echo "${VERSIONS_RAW}" | grep -E '^[0-9]' || true | tr '\n' ',' | sed 's/,$//')
+          fi
         else
           echo "docker not available on runner; skipping image inspection"
+        fi
+
+        if [ -n "${SIM_VERSIONS}" ]; then
+          echo "Detected WinCC OA versions in image: ${SIM_VERSIONS}"
+          # only add simulated versions when a specific WINCCOA_VERSION wasn't supplied
+          if [ -z "${WINCCOA_VERSION}" ]; then
+            CMD+=(--simulated-winccoa-versions "${SIM_VERSIONS}")
+          else
+            echo "WINCCOA_VERSION is set (${WINCCOA_VERSION}); not adding --simulated-winccoa-versions"
+          fi
         fi
 
         echo "Executing: ${CMD[*]}"
