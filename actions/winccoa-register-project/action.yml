@@ -61,5 +61,14 @@ runs:
           CMD+=(--wincc-oa-version "${WINCCOA_VERSION}")
         fi
 
+        echo "Inspecting WinCC OA installation inside image (if available):"
+        echo "WINCCOA_IMAGE=${WINCCOA_IMAGE:-<not set>}"
+        if command -v docker >/dev/null 2>&1; then
+          echo "Listing /opt/WinCC_OA inside image $WINCCOA_IMAGE (may fail if image not present):"
+          docker run --rm "${WINCCOA_IMAGE}" ls -la /opt/WinCC_OA || true
+        else
+          echo "docker not available on runner; skipping image inspection"
+        fi
+
         echo "Executing: ${CMD[*]}"
         "${CMD[@]}"
