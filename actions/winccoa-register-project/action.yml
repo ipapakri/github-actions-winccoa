@@ -68,6 +68,8 @@ runs:
           echo "Listing /opt/WinCC_OA inside image $WINCCOA_IMAGE (may fail if image not present):"
           # list entries (one per line) and also print full long listing for visibility
           docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -la /opt/WinCC_OA || true'
+          echo "Listing /opt/WinCC_OA/3.21 inside image $WINCCOA_IMAGE (if present):"
+          docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -la /opt/WinCC_OA/3.21 || true'
           # capture potential version directories (lines starting with digit like 3.21)
           VERSIONS_RAW=$(docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -1 /opt/WinCC_OA 2>/dev/null || true') || true
           if [ -n "${VERSIONS_RAW}" ]; then
