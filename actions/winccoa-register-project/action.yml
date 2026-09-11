@@ -42,7 +42,8 @@ runs:
         # Install helper into the workspace and invoke its JS entry directly
         npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@1.1.0
 
-        CMD=(node -e "require('@winccoa-tools-pack/npm-winccoa-register-project').main().catch(e=>{console.error(e);process.exit(1)})" --
+        # Invoke the compiled CLI directly to ensure argument parsing matches local runs
+        CMD=(node node_modules/@winccoa-tools-pack/npm-winccoa-register-project/dist/cjs/index.js
           --project-path "${PROJECT_PATH}"
           --langs "${LANGUAGES}"
         )
