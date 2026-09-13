@@ -1,5 +1,5 @@
 name: "WinCC OA Register Project"
-description: "Create, configure and register a WinCC OA project configuration file with language support"
+description: "Register a WinCC OA project using @winccoa-tools-pack/npm-winccoa-register-project"
 author: "winccoa-tools-pack"
 
 inputs:
@@ -8,87 +8,272 @@ inputs:
     required: true
 
   sub-projects:
-    description: "Optional newline-separated list of sub-project identifiers or paths (one per line). Supports IDs or paths, and IDs may contain spaces."
+    description: >-
+      Optional newline-separated list of sub-project paths or install-relative
+      IDs (one per line). Forwarded as repeated --sub-project flags.
     required: false
     default: ""
 
-
   languages:
-    description: "Languages to configure, space-separated full locale names (e.g., en_US.utf8 de_AT.utf8)"
+    description: >-
+      Languages to configure. Accepts space-separated or newline-separated full
+      locale names (e.g., en_US.utf8 de_AT.utf8).
     required: true
 
   winccoa-version:
-    description: "WinCC OA version (e.g., 3.21)"
+    description: "WinCC OA version (e.g., 3.21). Required."
+    required: true
+
+  docker-image:
+    description: >-
+      Optional container image that contains WinCC OA. When set, the public npm
+      CLI runs inside that image with the workspace mounted at /workspace.
+      When empty, the action runs on the current runner/job container host.
     required: false
     default: ""
+
+  package-version:
+    description: >-
+      Version or dist-tag of @winccoa-tools-pack/npm-winccoa-register-project
+      (for example 1.1.0 or latest). Do not use git refs such as main.
+    required: false
+    default: "1.1.0"
+
+  node-version:
+    description: "Node.js major version installed when the environment has no Node"
+    required: false
+    default: "22"
 
 runs:
   using: "composite"
   steps:
-    - name: Run npm helper to create and register project
+    - name: Register project via public npm package
       shell: bash
       env:
         PROJECT_PATH: ${{ inputs.project-path }}
         SUB_PROJECTS: ${{ inputs.sub-projects }}
         LANGUAGES: ${{ inputs.languages }}
         WINCCOA_VERSION: ${{ inputs.winccoa-version }}
+        DOCKER_IMAGE: ${{ inputs.docker-image }}
+        PACKAGE_VERSION: ${{ inputs.package-version }}
+        NODE_VERSION: ${{ inputs.node-version }}
       run: |
         set -euo pipefail
 
-        echo "Installing @winccoa-tools-pack/npm-winccoa-register-project@main..."
-        npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@main
-
-        echo "Running winccoa register helper..."
-        # Install helper into the workspace and invoke its JS entry directly
-        npm install --no-save @winccoa-tools-pack/npm-winccoa-register-project@main
-
-        # Invoke the compiled CLI directly to ensure argument parsing matches local runs
-        CMD=(node node_modules/@winccoa-tools-pack/npm-winccoa-register-project/dist/cjs/index.js
-          --project-path "${PROJECT_PATH}"
-          --langs "${LANGUAGES}"
-        )
-
-        # Convert newline-separated SUB_PROJECTS into repeated --sub-project args
-        if [ -n "${SUB_PROJECTS}" ]; then
-          while IFS= read -r sp || [ -n "${sp}" ]; do
-            # skip empty lines
-            [ -z "${sp}" ] && continue
-            CMD+=(--sub-project "${sp}")
-          done <<< "${SUB_PROJECTS}"
+        if [ -z "${WINCCOA_VERSION}" ]; then
+          echo "::error::winccoa-version is required"
+          exit 2
+        fi
+        if [ -z "${LANGUAGES}" ]; then
+          echo "::error::languages is required"
+          exit 2
+        fi
+        if [ -z "${PACKAGE_VERSION}" ] || [ "${PACKAGE_VERSION}" = "main" ]; then
+          echo "::error::package-version must be a published npm version or dist-tag (not main)"
+          exit 2
         fi
 
-        if [ -n "${WINCCOA_VERSION}" ]; then
-          CMD+=(--wincc-oa-version "${WINCCOA_VERSION}")
+        PROJECT_PATH_NORM="${PROJECT_PATH#./}"
+        if [ -z "${PROJECT_PATH_NORM}" ]; then
+          PROJECT_PATH_NORM="."
         fi
 
-        echo "Inspecting WinCC OA installation inside image (if available):"
-        echo "WINCCOA_IMAGE=${WINCCOA_IMAGE:-<not set>}"
-        SIM_VERSIONS=""
-        if command -v docker >/dev/null 2>&1; then
-          echo "Listing /opt/WinCC_OA inside image $WINCCOA_IMAGE (may fail if image not present):"
-          # list entries (one per line) and also print full long listing for visibility
-          docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -la /opt/WinCC_OA || true'
-          echo "Listing /opt/WinCC_OA/3.21 inside image $WINCCOA_IMAGE (if present):"
-          docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -la /opt/WinCC_OA/3.21 || true'
-          # capture potential version directories (lines starting with digit like 3.21)
-          VERSIONS_RAW=$(docker run --rm "${WINCCOA_IMAGE}" sh -c 'ls -1 /opt/WinCC_OA 2>/dev/null || true') || true
-          if [ -n "${VERSIONS_RAW}" ]; then
-            # filter lines that look like version names (start with digit) and join with commas
-            SIM_VERSIONS=$(echo "${VERSIONS_RAW}" | grep -E '^[0-9]' || true | tr '\n' ',' | sed 's/,$//')
+        LANGS="$(printf '%s\n' "${LANGUAGES}" | tr '\n' ' ' | xargs | tr ' ' ',')"
+        if [ -z "${LANGS}" ]; then
+          echo "::error::languages resolved to an empty list"
+          exit 2
+        fi
+
+        PKG_NAME="@winccoa-tools-pack/npm-winccoa-register-project"
+        PKG_SPEC="${PKG_NAME}@${PACKAGE_VERSION}"
+
+        ensure_node() {
+          if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+            echo "Using existing Node $(node -v) / npm $(npm -v)"
+            return 0
           fi
-        else
-          echo "docker not available on runner; skipping image inspection"
-        fi
 
-        if [ -n "${SIM_VERSIONS}" ]; then
-          echo "Detected WinCC OA versions in image: ${SIM_VERSIONS}"
-          # only add simulated versions when a specific WINCCOA_VERSION wasn't supplied
-          if [ -z "${WINCCOA_VERSION}" ]; then
-            CMD+=(--simulated-winccoa-versions "${SIM_VERSIONS}")
+          local major="${NODE_VERSION}"
+          local arch
+          case "$(uname -m)" in
+            x86_64|amd64) arch="x64" ;;
+            aarch64|arm64) arch="arm64" ;;
+            *)
+              echo "::error::Unsupported architecture for Node bootstrap: $(uname -m)"
+              return 2
+              ;;
+          esac
+
+          echo "Node/npm not found; installing Node ${major} (${arch}) from nodejs.org"
+          if command -v apt-get >/dev/null 2>&1; then
+            apt-get update -qq
+            apt-get install -y -qq ca-certificates curl xz-utils >/dev/null
+          fi
+
+          local ver
+          ver="$(curl -fsSL "https://nodejs.org/dist/index.json" | \
+            python3 -c "import json,sys; major=sys.argv[1]; data=json.load(sys.stdin); lts=[x['version'] for x in data if x['version'].startswith('v'+major+'.') and x.get('lts')]; cands=[x['version'] for x in data if x['version'].startswith('v'+major+'.')]; print((lts or cands)[0])" \
+            "${major}")"
+
+          local url="https://nodejs.org/dist/${ver}/node-${ver}-linux-${arch}.tar.xz"
+          curl -fsSL "${url}" | tar -xJ -C /usr/local --strip-components=1
+          hash -r || true
+          echo "Installed Node $(node -v) / npm $(npm -v)"
+        }
+
+        run_register_cli() {
+          local project_path="$1"
+          ensure_node
+
+          local workdir
+          workdir="$(mktemp -d)"
+          cd "${workdir}"
+          npm init -y >/dev/null 2>&1
+          echo "Installing ${PKG_SPEC}"
+          npm install --silent --no-fund --no-audit "${PKG_SPEC}"
+
+          local pkg_root="${workdir}/node_modules/@winccoa-tools-pack/npm-winccoa-register-project"
+          local entry=""
+          if [ -f "${pkg_root}/dist/cjs/cli.js" ]; then
+            entry="${pkg_root}/dist/cjs/cli.js"
+          elif [ -f "${pkg_root}/dist/cjs/index.js" ]; then
+            # Published 1.1.0 bin points at missing src/index.js; use compiled entry.
+            entry="${pkg_root}/dist/cjs/index.js"
           else
-            echo "WINCCOA_VERSION is set (${WINCCOA_VERSION}); not adding --simulated-winccoa-versions"
+            echo "::error::Could not find CLI entry in ${pkg_root}"
+            ls -la "${pkg_root}" || true
+            exit 2
           fi
-        fi
 
-        echo "Executing: ${CMD[*]}"
-        "${CMD[@]}"
+          local args=(
+            --project-path "${project_path}"
+            --langs "${LANGS}"
+            --wincc-oa-version "${WINCCOA_VERSION}"
+            --runnable true
+          )
+
+          if [ -n "${SUB_PROJECTS}" ]; then
+            while IFS= read -r sp || [ -n "${sp}" ]; do
+              sp="$(printf '%s' "${sp}" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+              [ -z "${sp}" ] && continue
+              sp="${sp%\"}"
+              sp="${sp#\"}"
+              args+=(--sub-project "${sp}")
+            done <<< "${SUB_PROJECTS}"
+          fi
+
+          echo "Running: node ${entry} ${args[*]}"
+          node "${entry}" "${args[@]}"
+        }
+
+        if [ -n "${DOCKER_IMAGE}" ]; then
+          if ! command -v docker >/dev/null 2>&1; then
+            echo "::error::docker-image was set but docker is not available on the runner"
+            exit 127
+          fi
+
+          HOST_PROJ_PATH="${GITHUB_WORKSPACE}/${PROJECT_PATH_NORM}"
+          if [ ! -d "${HOST_PROJ_PATH}" ]; then
+            echo "::error::Project path does not exist: ${HOST_PROJ_PATH}"
+            exit 2
+          fi
+
+          CONTAINER_PROJ_PATH="/workspace/${PROJECT_PATH_NORM}"
+          echo "Running ${PKG_SPEC} inside ${DOCKER_IMAGE}"
+          docker run --rm \
+            --user root \
+            -v "${GITHUB_WORKSPACE}:/workspace:rw" \
+            -w /workspace \
+            -e PROJECT_PATH="${CONTAINER_PROJ_PATH}" \
+            -e SUB_PROJECTS="${SUB_PROJECTS}" \
+            -e LANGS="${LANGS}" \
+            -e WINCCOA_VERSION="${WINCCOA_VERSION}" \
+            -e PACKAGE_VERSION="${PACKAGE_VERSION}" \
+            -e NODE_VERSION="${NODE_VERSION}" \
+            -e PKG_SPEC="${PKG_SPEC}" \
+            "${DOCKER_IMAGE}" \
+            bash -lc '
+set -euo pipefail
+
+ensure_node() {
+  if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
+    echo "Using existing Node $(node -v) / npm $(npm -v)"
+    return 0
+  fi
+  major="${NODE_VERSION}"
+  case "$(uname -m)" in
+    x86_64|amd64) arch="x64" ;;
+    aarch64|arm64) arch="arm64" ;;
+    *) echo "::error::Unsupported architecture: $(uname -m)"; exit 2 ;;
+  esac
+  echo "Node/npm not found; installing Node ${major} (${arch}) from nodejs.org"
+  if command -v apt-get >/dev/null 2>&1; then
+    apt-get update -qq
+    apt-get install -y -qq ca-certificates curl xz-utils >/dev/null
+  fi
+  ver="$(curl -fsSL https://nodejs.org/dist/index.json | python3 -c "import json,sys; major=sys.argv[1]; data=json.load(sys.stdin); lts=[x[\"version\"] for x in data if x[\"version\"].startswith(\"v\"+major+\".\") and x.get(\"lts\")]; cands=[x[\"version\"] for x in data if x[\"version\"].startswith(\"v\"+major+\".\")]; print((lts or cands)[0])" "${major}")"
+  curl -fsSL "https://nodejs.org/dist/${ver}/node-${ver}-linux-${arch}.tar.xz" | tar -xJ -C /usr/local --strip-components=1
+  hash -r || true
+  echo "Installed Node $(node -v) / npm $(npm -v)"
+}
+
+if [ ! -d "/opt/WinCC_OA/${WINCCOA_VERSION}" ]; then
+  echo "::error::WinCC OA install not found at /opt/WinCC_OA/${WINCCOA_VERSION}"
+  ls -la /opt/WinCC_OA || true
+  exit 2
+fi
+if [ ! -d "${PROJECT_PATH}" ]; then
+  echo "::error::Project path does not exist in container: ${PROJECT_PATH}"
+  exit 2
+fi
+
+ensure_node
+workdir="$(mktemp -d)"
+cd "${workdir}"
+npm init -y >/dev/null 2>&1
+echo "Installing ${PKG_SPEC}"
+npm install --silent --no-fund --no-audit "${PKG_SPEC}"
+pkg_root="${workdir}/node_modules/@winccoa-tools-pack/npm-winccoa-register-project"
+if [ -f "${pkg_root}/dist/cjs/cli.js" ]; then
+  entry="${pkg_root}/dist/cjs/cli.js"
+elif [ -f "${pkg_root}/dist/cjs/index.js" ]; then
+  entry="${pkg_root}/dist/cjs/index.js"
+else
+  echo "::error::Could not find CLI entry in ${pkg_root}"
+  ls -la "${pkg_root}" || true
+  exit 2
+fi
+
+args=(--project-path "${PROJECT_PATH}" --langs "${LANGS}" --wincc-oa-version "${WINCCOA_VERSION}" --runnable true)
+if [ -n "${SUB_PROJECTS}" ]; then
+  while IFS= read -r sp || [ -n "${sp}" ]; do
+    sp="$(printf "%s" "${sp}" | sed -e "s/^[[:space:]]*//" -e "s/[[:space:]]*$//")"
+    [ -z "${sp}" ] && continue
+    sp="${sp%\"}"
+    sp="${sp#\"}"
+    if [ -d "/workspace/${sp#./}" ]; then
+      sp="/workspace/${sp#./}"
+    fi
+    args+=(--sub-project "${sp}")
+  done <<< "${SUB_PROJECTS}"
+fi
+
+echo "Running: node ${entry} ${args[*]}"
+node "${entry}" "${args[@]}"
+'
+        else
+          HOST_PROJ_PATH="${GITHUB_WORKSPACE}/${PROJECT_PATH_NORM}"
+          if [ ! -d "${HOST_PROJ_PATH}" ]; then
+            if [ -d "${PROJECT_PATH}" ]; then
+              HOST_PROJ_PATH="${PROJECT_PATH}"
+            else
+              echo "::error::Project path does not exist: ${HOST_PROJ_PATH}"
+              exit 2
+            fi
+          fi
+          if [ ! -d "/opt/WinCC_OA/${WINCCOA_VERSION}" ]; then
+            echo "::error::WinCC OA install not found at /opt/WinCC_OA/${WINCCOA_VERSION}. Provide docker-image or run inside a WinCC OA container."
+            exit 2
+          fi
+          run_register_cli "${HOST_PROJ_PATH}"
+        fi

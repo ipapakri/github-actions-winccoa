@@ -1,32 +1,38 @@
 # WinCC OA Register Project
 
-Creates  WinCC OA project config file and register the project with support for:
+Thin GitHub Action wrapper around the public npm package
+[`@winccoa-tools-pack/npm-winccoa-register-project`](https://www.npmjs.com/package/@winccoa-tools-pack/npm-winccoa-register-project).
 
-- multiple languages
-- multiple sub-projects
-- set correct WinCC OA version
+The action installs the published package and runs its CLI. It does **not**
+reimplement config generation or `WCCILpmon` registration in shell.
 
-Thic action might be used as for runnable projects and also for sub-projects (not runnable)
+## Runtime
+
+- Linux runners only
+- Requires a WinCC OA install either via:
+  - `docker-image` (recommended on GitHub-hosted runners), or
+  - a job container / host that already has WinCC OA under `/opt/WinCC_OA/<version>`
+- If Node.js is missing, the action bootstraps a Node binary from nodejs.org
 
 ## Inputs
 
 | Input | Required | Default | Description |
 | ----- | -------- | ------- | ----------- |
 | `project-path` | yes | - | Path to the main WinCC OA project directory (e.g., `src/Squirt`) |
-| `sub-projects` | no | empty | Optional newline-separated list of sub-project identifiers or paths (one per line). IDs may contain spaces. |
-| `languages` | yes | - | Languages to configure, space-separated full locale names (e.g., `en_US.utf8 de_AT.utf8`) |
-| `winccoa-version` | no | - | WinCC OA version (e.g., `3.21`) This is mandaotry in case your gh runner has more the 1 WinCC OA version installed |
+| `sub-projects` | no | empty | Optional newline-separated list of sub-project paths or IDs |
+| `languages` | yes | - | Space- or newline-separated locales (e.g., `en_US.utf8 de_AT.utf8`) |
+| `winccoa-version` | yes | - | WinCC OA version (e.g., `3.21`) |
+| `docker-image` | no | empty | Optional WinCC OA container image |
+| `package-version` | no | `1.1.0` | npm version/dist-tag (not a git ref like `main`) |
+| `node-version` | no | `22` | Node major used when bootstrapping Node |
 
 ## Behavior
 
-- Creates a config directory at `{project-path}/config`
-- Generates a WinCC OA config file with:
-  - `pvss_path = "/opt/WinCC_OA/{winccoa-version}"`
-  - Optional sub-project `proj_path` entries, one per configured sub-project ID
-  - Final `proj_path` entry for the main project
-  - Multiple `langs` entries (one per language)
-  - `proj_version = "{winccoa-version}"`
-- Registers the WinCC OA (sub-) project
+- Installs `@winccoa-tools-pack/npm-winccoa-register-project@<package-version>`
+- Invokes the compiled CLI entry (`dist/cjs/cli.js`, fallback `dist/cjs/index.js`)
+- Passes `--project-path`, `--langs`, `--wincc-oa-version`, optional `--sub-project`
+- When `docker-image` is set, runs the CLI inside the image with the workspace
+  mounted at `/workspace`
 
 ## Usage
 
@@ -34,25 +40,19 @@ Thic action might be used as for runnable projects and also for sub-projects (no
 - uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-register-project@main
   with:
     project-path: src/Squirt
-    languages: en_US.utf8 de_AT.utf8
-
-## Example: multiple projects (sub-projects/add-ons)
-
-- uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-register-project@main
-  with:
-    project-path: src/Squirt
-    sub-projects: |
-      addons/plugin1
-      "Test Framework 3.21"
-      path/to/proj3
-    languages: en_US.utf8 de_AT.utf8
-    winccoa-version: 3.21
+    languages: |
+      en_US.utf8
+      de_AT.utf8
+    winccoa-version: '3.21'
+    docker-image: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
+    package-version: '1.1.0'
 ```
 
-## Exit Code
+## Notes
 
-- `0`: Success (config created and registered)
-- `!= 0`: Error during config creation or registration
+- Never pin npm packages to git branch names such as `@main`
+- Published package `1.1.0` has a broken `bin` path (`src/index.js` is not
+  shipped). This action calls `dist/cjs/*` directly to work around that
 
 ---
 

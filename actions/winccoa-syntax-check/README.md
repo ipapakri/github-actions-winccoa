@@ -1,30 +1,38 @@
-# syntax-check
+# WinCC OA Syntax Check
 
-Runs WinCC OA syntax validation.
+Thin GitHub Action wrapper around the public npm package
+[`@winccoa-tools-pack/npm-winccoa-syntax-check`](https://www.npmjs.com/package/@winccoa-tools-pack/npm-winccoa-syntax-check).
+
+Optionally registers the project first via
+`winccoa-register-project` (also a thin npm wrapper).
 
 ## Runtime and compatibility
 
-- This action supports Linux runners only.
-- The current test baseline is Debian-based Docker images with WinCC OA 3.21.
-- It is expected to work with WinCC OA 3.21 patch versions.
-- It should also work with WinCC OA 3.22.
-- Legacy WinCC OA 3.20 and 3.19 may work, but this is not guaranteed and should be validated in your environment.
- - Node.js and `npm` must be available in the runner or container. The action will not install Node.js; ensure the workflow config (or container image) provides the desired Node.js version.
+- Linux runners only
+- Baseline: Debian-based Docker images with WinCC OA 3.21
+- Expected to work with WinCC OA 3.21 patch versions and 3.22
+- Provide either:
+  - `docker-image` (recommended on GitHub-hosted runners), or
+  - a job container / host that already has WinCC OA installed
 
 ## Inputs
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
 | `path` | No | `.` | Project root relative to the repository root |
-| `fail-on-error` | No | `true` | Fails the job when the checker returns an error |
-| `winccoa-version` | No | empty | Installed WinCC OA version such as `3.21`. Optional; if omitted the workflow must provide a runner/container with WinCC OA installed |
-| `languages` | No | `en_US.utf8` | Newline-separated list of locales to include in generated config (one per line). Default is `en_US.utf8` |
-| `register-project` | No | `true` | When `true` the action will invoke the local `winccoa-register-project` action prior to running the syntax check. Workflows may instead call `uses: ./actions/winccoa-register-project` in a prior step |
-| `config` | No | empty | Path to project config file relative to the repo root. If empty defaults to `<path>/config/config` |
+| `fail-on-error` | No | `true` | Fail the job when syntax check fails |
+| `winccoa-version` | Yes | - | Installed WinCC OA version such as `3.21` |
+| `languages` | No | `en_US.utf8` | Locales for generated config when `register-project` is true |
+| `docker-image` | No | empty | Optional WinCC OA container image |
+| `register-project` | No | `true` | Create/register project config before the check |
 | `mode` | No | `all` | `all`, `scripts`, or `panels` |
 | `integrity` | No | `false` | Enables integrity checks |
 | `timeout-ms` | No | `60000` | Validation timeout in milliseconds |
-| `node-version` | No | `20.17.0` | Node.js version to install when node/npm are missing in the image |
+| `scripts-path` | No | empty | Optional scripts start path (`-s`) |
+| `panels-path` | No | empty | Optional panels start path (`-p`) |
+| `register-package-version` | No | `1.1.0` | npm version for register-project package |
+| `package-version` | No | `0.1.0` | npm version/dist-tag for syntax-check package |
+| `node-version` | No | `22` | Node major used when bootstrapping Node |
 
 ## Outputs
 
@@ -47,21 +55,37 @@ jobs:
     permissions:
       contents: read
       packages: read
-
+    env:
+      WINCCOA_IMAGE: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run syntax check
-        uses: winccoa-tools-pack/github-actions-winccoa/actions/syntax-check@v1
+      - uses: docker/login-action@v3
         with:
-          path: .
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - run: docker pull "$WINCCOA_IMAGE"
+
+      - uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-syntax-check@main
+        with:
+          path: src/Squirt
           winccoa-version: '3.21'
+          docker-image: ${{ env.WINCCOA_IMAGE }}
           languages: |
             en_US.utf8
           fail-on-error: 'true'
-
-      # Note: This action does not allocate or manage Docker images.
-      # Provide a runner or a container that has WinCC OA installed, or
-      # call `uses: ./actions/winccoa-register-project` in a prior step
-      # to prepare the project in an environment that contains WinCC OA.
+          package-version: '0.1.0'
 ```
+
+## Notes
+
+- This action installs and runs the public npm CLI; it does not duplicate package logic
+- Never pin npm packages to git branch names such as `@main`
+- When `register-project: true`, it calls `winccoa-register-project` first
+
+---
+
+<!-- markdownlint-disable-next-line MD033 -->
+<center>Made with ❤️ for and by the WinCC OA community</center>
