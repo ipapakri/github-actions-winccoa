@@ -35,9 +35,9 @@ inputs:
   package-version:
     description: >-
       Version or dist-tag of @winccoa-tools-pack/npm-winccoa-register-project
-      (for example 1.1.0 or latest). Do not use git refs such as main.
+      (for example 1.1.1 or latest). Do not use git refs such as main.
     required: false
-    default: "1.1.0"
+    default: "1.1.1"
 
   node-version:
     description: "Node.js major version installed when the environment has no Node"
@@ -137,7 +137,7 @@ runs:
           if [ -f "${pkg_root}/dist/cjs/cli.js" ]; then
             entry="${pkg_root}/dist/cjs/cli.js"
           elif [ -f "${pkg_root}/dist/cjs/index.js" ]; then
-            # Published 1.1.0 bin points at missing src/index.js; use compiled entry.
+            # Published 1.1.1 bin points at missing src/index.js; use compiled entry.
             entry="${pkg_root}/dist/cjs/index.js"
           else
             echo "::error::Could not find CLI entry in ${pkg_root}"

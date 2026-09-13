@@ -30,7 +30,7 @@ Optionally registers the project first via
 | `timeout-ms` | No | `60000` | Validation timeout in milliseconds |
 | `scripts-path` | No | empty | Optional scripts start path (`-s`) |
 | `panels-path` | No | empty | Optional panels start path (`-p`) |
-| `register-package-version` | No | `1.1.0` | npm version for register-project package |
+| `register-package-version` | No | `1.1.1` | npm version for register-project package |
 | `package-version` | No | `0.1.0` | npm version/dist-tag for syntax-check package |
 | `node-version` | No | `22` | Node major used when bootstrapping Node |
 

@@ -23,7 +23,7 @@ reimplement config generation or `WCCILpmon` registration in shell.
 | `languages` | yes | - | Space- or newline-separated locales (e.g., `en_US.utf8 de_AT.utf8`) |
 | `winccoa-version` | yes | - | WinCC OA version (e.g., `3.21`) |
 | `docker-image` | no | empty | Optional WinCC OA container image |
-| `package-version` | no | `1.1.0` | npm version/dist-tag (not a git ref like `main`) |
+| `package-version` | no | `1.1.1` | npm version/dist-tag (not a git ref like `main`) |
 | `node-version` | no | `22` | Node major used when bootstrapping Node |
 
 ## Behavior
@@ -45,13 +45,13 @@ reimplement config generation or `WCCILpmon` registration in shell.
       de_AT.utf8
     winccoa-version: '3.21'
     docker-image: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
-    package-version: '1.1.0'
+    package-version: '1.1.1'
 ```
 
 ## Notes
 
 - Never pin npm packages to git branch names such as `@main`
-- Published package `1.1.0` has a broken `bin` path (`src/index.js` is not
+- Published package `1.1.1` has a broken `bin` path (`src/index.js` is not
   shipped). This action calls `dist/cjs/*` directly to work around that
 
 ---

@@ -67,7 +67,7 @@ inputs:
       Version/dist-tag for @winccoa-tools-pack/npm-winccoa-register-project when
       register-project is true.
     required: false
-    default: "1.1.0"
+    default: "1.1.1"
 
   package-version:
     description: >-
