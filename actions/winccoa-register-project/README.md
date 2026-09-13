@@ -33,6 +33,8 @@ reimplement config generation or `WCCILpmon` registration in shell.
 - Passes `--project-path`, `--langs`, `--wincc-oa-version`, optional `--sub-project`
 - When `docker-image` is set, runs the CLI inside the image with the workspace
   mounted at `/workspace`
+- Shell logic lives in `scripts/` (`run.sh`, `run-in-container.sh`, `lib.sh`) so
+  `action.yml` stays valid YAML
 
 ## Usage
 
