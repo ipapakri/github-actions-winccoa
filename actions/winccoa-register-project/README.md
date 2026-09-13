@@ -51,8 +51,8 @@ reimplement config generation or `WCCILpmon` registration in shell.
 ## Notes
 
 - Never pin npm packages to git branch names such as `@main`
-- Published package `1.1.1` has a broken `bin` path (`src/index.js` is not
-  shipped). This action calls `dist/cjs/*` directly to work around that
+- Default package version is `1.1.1` (fixed `bin` → `dist/cjs/cli.js`)
+- The action still invokes `dist/cjs/*` directly for reliability across versions
 
 ---
 
