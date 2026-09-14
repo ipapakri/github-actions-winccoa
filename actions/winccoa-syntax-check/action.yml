@@ -27,13 +27,16 @@ inputs:
   docker-image:
     description: >-
       Optional container image that contains WinCC OA. When set, registration and
-      syntax check run inside that image. When empty, the action runs on the
-      current runner/container host.
+      syntax check run inside the same image instance. When empty, the action
+      runs on the current runner/container host.
     required: false
     default: ""
 
   register-project:
-    description: "Whether to create/register a project config before the syntax check"
+    description: >-
+      Whether to create/register a runnable project config before the syntax
+      check. Required for WCCOAui -syntax. Registration always uses --runnable
+      true and, with docker-image, runs in the same container as the check.
     required: false
     default: "true"
 
@@ -89,17 +92,6 @@ outputs:
 runs:
   using: "composite"
   steps:
-    - name: Register project (optional)
-      if: ${{ inputs.register-project == 'true' }}
-      uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-register-project@main
-      with:
-        project-path: ${{ inputs.path }}
-        languages: ${{ inputs.languages }}
-        winccoa-version: ${{ inputs.winccoa-version }}
-        docker-image: ${{ inputs.docker-image }}
-        package-version: ${{ inputs.register-package-version }}
-        node-version: ${{ inputs.node-version }}
-
     - name: Run syntax check via public npm package
       id: run
       shell: bash
@@ -116,4 +108,7 @@ runs:
         PANELS_PATH: ${{ inputs.panels-path }}
         PACKAGE_VERSION: ${{ inputs.package-version }}
         NODE_VERSION: ${{ inputs.node-version }}
+        REGISTER_PROJECT: ${{ inputs.register-project }}
+        REGISTER_PACKAGE_VERSION: ${{ inputs.register-package-version }}
+        LANGUAGES: ${{ inputs.languages }}
       run: bash "${{ github.action_path }}/scripts/run.sh"

@@ -9,6 +9,10 @@ normalize_rel_path() {
   printf '%s' "${p}"
 }
 
+normalize_langs() {
+  printf '%s\n' "$1" | tr '\n' ' ' | xargs | tr ' ' ','
+}
+
 ensure_node() {
   if command -v node >/dev/null 2>&1 && command -v npm >/dev/null 2>&1; then
     echo "Using existing Node $(node -v) / npm $(npm -v)"
@@ -34,6 +38,58 @@ ensure_node() {
   curl -fsSL "https://nodejs.org/dist/${ver}/node-${ver}-linux-${arch}.tar.xz" | tar -xJ -C /usr/local --strip-components=1
   hash -r || true
   echo "Installed Node $(node -v) / npm $(npm -v)"
+}
+
+# Register project as runnable in the *current* environment.
+# Must run in the same container/host as WCCOAui so pvssInst.conf is visible.
+run_register_cli() {
+  local project_path="$1"
+  local langs
+  langs="$(normalize_langs "${LANGUAGES:-en_US.utf8}")"
+  if [ -z "${langs}" ]; then
+    echo "::error::languages resolved to an empty list"
+    exit 2
+  fi
+  if [ -z "${REGISTER_PACKAGE_VERSION:-}" ] || [ "${REGISTER_PACKAGE_VERSION}" = "main" ]; then
+    echo "::error::register-package-version must be a published npm version or dist-tag (not main)"
+    exit 2
+  fi
+  if [ ! -d "${project_path}" ]; then
+    echo "::error::Project path does not exist: ${project_path}"
+    exit 2
+  fi
+
+  ensure_node
+  local workdir
+  workdir="$(mktemp -d)"
+  cd "${workdir}"
+  npm init -y >/dev/null 2>&1
+  local reg_spec="@winccoa-tools-pack/npm-winccoa-register-project@${REGISTER_PACKAGE_VERSION}"
+  echo "Installing ${reg_spec} (runnable registration)"
+  npm install --silent --no-fund --no-audit "${reg_spec}"
+
+  local pkg_root="${workdir}/node_modules/@winccoa-tools-pack/npm-winccoa-register-project"
+  local entry=""
+  if [ -f "${pkg_root}/dist/cjs/cli.js" ]; then
+    entry="${pkg_root}/dist/cjs/cli.js"
+  elif [ -f "${pkg_root}/dist/cjs/index.js" ]; then
+    entry="${pkg_root}/dist/cjs/index.js"
+  else
+    echo "::error::Could not find register CLI entry in ${pkg_root}"
+    ls -la "${pkg_root}" || true
+    exit 2
+  fi
+
+  # Syntax check requires a runnable registered project.
+  local args=(
+    --project-path "${project_path}"
+    --langs "${langs}"
+    --wincc-oa-version "${OA_VERSION}"
+    --runnable true
+  )
+
+  echo "Running: node ${entry} ${args[*]}"
+  node "${entry}" "${args[@]}"
 }
 
 run_syntax_cli() {

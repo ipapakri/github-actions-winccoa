@@ -27,8 +27,10 @@ PROJECT_PATH_NORM="$(normalize_rel_path "${PROJECT_PATH:-.}")"
 PKG_NAME="@winccoa-tools-pack/npm-winccoa-syntax-check"
 export PKG_SPEC="${PKG_NAME}@${PACKAGE_VERSION}"
 
-HOST_CONFIG_FILE="${GITHUB_WORKSPACE}/${PROJECT_PATH_NORM}/config/config"
-CONTAINER_CONFIG_FILE="/workspace/${PROJECT_PATH_NORM}/config/config"
+HOST_PROJ_PATH="${GITHUB_WORKSPACE}/${PROJECT_PATH_NORM}"
+HOST_CONFIG_FILE="${HOST_PROJ_PATH}/config/config"
+CONTAINER_PROJ_PATH="/workspace/${PROJECT_PATH_NORM}"
+CONTAINER_CONFIG_FILE="${CONTAINER_PROJ_PATH}/config/config"
 
 set +e
 if [ -n "${DOCKER_IMAGE:-}" ]; then
@@ -36,13 +38,15 @@ if [ -n "${DOCKER_IMAGE:-}" ]; then
     echo "::error::docker-image was set but docker is not available on the runner"
     exit 127
   fi
-  if [ ! -f "${HOST_CONFIG_FILE}" ]; then
-    echo "::error::Project config not found at ${HOST_CONFIG_FILE}. Enable register-project or provide a config first."
+  if [ ! -d "${HOST_PROJ_PATH}" ]; then
+    echo "::error::Project path does not exist: ${HOST_PROJ_PATH}"
     exit 2
   fi
 
   ACTION_PATH="${ACTION_PATH:-${SCRIPT_DIR}/..}"
-  echo "Running ${PKG_SPEC} inside ${DOCKER_IMAGE}"
+  echo "Running register+syntax (${PKG_SPEC}) inside ${DOCKER_IMAGE}"
+  # One container for both steps: registration writes /etc/opt/pvss/pvssInst.conf
+  # which is not shared across containers.
   OUTPUT=$(docker run --rm \
     --user root \
     --shm-size=1g \
@@ -59,19 +63,33 @@ if [ -n "${DOCKER_IMAGE:-}" ]; then
     -e NODE_VERSION="${NODE_VERSION:-22}" \
     -e PKG_SPEC="${PKG_SPEC}" \
     -e CONFIG_FILE="${CONTAINER_CONFIG_FILE}" \
+    -e PROJECT_PATH_IN_CONTAINER="${CONTAINER_PROJ_PATH}" \
+    -e REGISTER_PROJECT="${REGISTER_PROJECT:-true}" \
+    -e REGISTER_PACKAGE_VERSION="${REGISTER_PACKAGE_VERSION:-1.1.1}" \
+    -e LANGUAGES="${LANGUAGES:-en_US.utf8}" \
     "${DOCKER_IMAGE}" \
     bash /action/scripts/run-in-container.sh 2>&1)
   EXIT_CODE=$?
 else
-  if [ ! -f "${HOST_CONFIG_FILE}" ]; then
-    echo "::error::Project config not found at ${HOST_CONFIG_FILE}. Enable register-project or provide a config first."
+  if [ ! -d "${HOST_PROJ_PATH}" ]; then
+    echo "::error::Project path does not exist: ${HOST_PROJ_PATH}"
     exit 2
   fi
   if [ ! -d "/opt/WinCC_OA/${OA_VERSION}" ]; then
     echo "::error::WinCC OA install not found at /opt/WinCC_OA/${OA_VERSION}. Provide docker-image or run inside a WinCC OA container."
     exit 2
   fi
-  echo "Running ${PKG_SPEC} on current host/container"
+  echo "Running on current host/container"
+  if [ "${REGISTER_PROJECT:-true}" = "true" ]; then
+    echo "Registering project as runnable before syntax check"
+    set -e
+    run_register_cli "${HOST_PROJ_PATH}"
+    set +e
+  fi
+  if [ ! -f "${HOST_CONFIG_FILE}" ]; then
+    echo "::error::Project config not found at ${HOST_CONFIG_FILE}. Enable register-project or provide a config first."
+    exit 2
+  fi
   OUTPUT=$(run_syntax_cli "${HOST_CONFIG_FILE}" 2>&1)
   EXIT_CODE=$?
 fi

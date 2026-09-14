@@ -83,7 +83,10 @@ jobs:
 
 - This action installs and runs the public npm CLI; it does not duplicate package logic
 - Never pin npm packages to git branch names such as `@main`
-- When `register-project: true`, it calls `winccoa-register-project` first
+- When `register-project: true` (default), the project is registered as
+  **runnable** (`--runnable true`) in the **same** host/container as the syntax
+  check. A separate Docker register step cannot work: `pvssInst.conf` is not
+  shared across containers, and WCCOAui `-syntax` requires a registered project.
 - Shell logic lives in `scripts/` (`run.sh`, `run-in-container.sh`, `lib.sh`) so
   `action.yml` stays valid YAML
 
