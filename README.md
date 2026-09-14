@@ -44,6 +44,21 @@ github-actions-winccoa/
 
 ## Available actions
 
+### ctrl-copyright-check
+
+Scan *.ctl files for missing copyright headers and forbidden legacy
+Siemens/GPL markers. Supports a path blacklist for known exceptions.
+
+`yaml
+- uses: winccoa-tools-pack/github-actions-winccoa/actions/ctrl-copyright-check@main
+  with:
+    source-paths: src tests
+    expected-owner: winccoa-tools-pack
+    expected-spdx: MIT
+    blacklist: |
+      tests/vendor/legacy.ctl
+`
+
 ### winccoa-build-docs
 
 Builds WinCC OA help documentation in a container and extracts Doxygen

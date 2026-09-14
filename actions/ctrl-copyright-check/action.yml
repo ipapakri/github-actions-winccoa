@@ -1,0 +1,44 @@
+name: "Ctrl Copyright Check"
+description: "Check CTL copyright/license headers for MIT and owner string"
+author: "winccoa-tools-pack"
+
+inputs:
+  source-paths:
+    description: "Space-separated source directories to scan (relative to repository root)"
+    required: false
+    default: "."
+  script-path:
+    description: >-
+      Optional path to a copyright helper script relative to the repository root.
+      When set, the path must exist (existence check only).
+    required: false
+    default: ""
+  expected-owner:
+    description: "Expected owner string in copyright line (informational for consumers)"
+    required: false
+    default: "winccoa-tools-pack"
+  expected-spdx:
+    description: "Expected SPDX identifier (informational for consumers)"
+    required: false
+    default: "MIT"
+  blacklist:
+    description: >-
+      Known exceptions that cannot carry the standard license header.
+      Newline- or space-separated repo-relative paths (optional # comments).
+      Matched files are skipped and reported as SKIPPED-BLACKLIST.
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Check copyright headers
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        SOURCE_PATHS: ${{ inputs.source-paths }}
+        SCRIPT_PATH: ${{ inputs.script-path }}
+        EXPECTED_OWNER: ${{ inputs.expected-owner }}
+        EXPECTED_SPDX: ${{ inputs.expected-spdx }}
+        BLACKLIST: ${{ inputs.blacklist }}
+      run: bash "${{ github.action_path }}/scripts/run.sh"
