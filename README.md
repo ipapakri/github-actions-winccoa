@@ -49,7 +49,7 @@ github-actions-winccoa/
 Scan *.ctl files for missing copyright headers and forbidden legacy
 Siemens/GPL markers. Supports a path blacklist for known exceptions.
 
-`yaml
+```yaml
 - uses: winccoa-tools-pack/github-actions-winccoa/actions/ctrl-copyright-check@main
   with:
     source-paths: src tests
@@ -57,7 +57,7 @@ Siemens/GPL markers. Supports a path blacklist for known exceptions.
     expected-spdx: MIT
     blacklist: |
       tests/vendor/legacy.ctl
-`
+```
 
 ### winccoa-build-docs
 
@@ -74,6 +74,20 @@ warnings for PR reporting or quality gates.
     max-warning-count: '0'
 ```
 
+### winccoa-logs-to-pr-review
+
+Parse classic WinCC OA logs with `@winccoa-tools-pack/npm-winccoa-log-reader`
+and post an OK/NOK PR summary (optional line review comments).
+
+```yaml
+- uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-logs-to-pr-review@main
+  with:
+    log-path: .artifacts/syntax-check.log
+    title: Syntax check report
+    include-error-types: CTRL
+    review-comments: 'true'
+```
+
 ## Runtime and compatibility
 
 - Actions in this repository are intended for Linux environments.
@@ -81,16 +95,17 @@ warnings for PR reporting or quality gates.
 - Compatibility is expected for WinCC OA 3.21 patch versions and WinCC OA 3.22.
 - Legacy WinCC OA 3.20 may work, but should be treated as best-effort and validated per project.
 
-### syntax-check
+### winccoa-syntax-check
 
-Runs WinCC OA syntax validation inside a Docker image.
+Runs WinCC OA syntax validation (npm package) and writes a classic log for PR reporting.
 
 ```yaml
-- uses: winccoa-tools-pack/github-actions-winccoa/actions/syntax-check@v1
+- id: syntax
+  uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-syntax-check@main
   with:
-    path: .
+    path: src/Squirt
     winccoa-version: '3.21'
-    docker-image: ghcr.io/winccoa-tools-pack/winccoa:latest
+    docker-image: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
 ```
 
 ### project-metadata

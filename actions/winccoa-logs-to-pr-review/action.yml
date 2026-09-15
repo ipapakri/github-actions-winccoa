@@ -1,0 +1,127 @@
+name: "WinCC OA Logs to PR Review"
+description: >-
+  Parse classic WinCC OA logs with npm-winccoa-log-reader, report OK/NOK file
+  counts on the PR, and optionally add line review comments for failures.
+author: "winccoa-tools-pack"
+
+inputs:
+  log-path:
+    description: "Path to a classic WinCC OA log file (relative to workspace or absolute)"
+    required: true
+
+  title:
+    description: "Heading used in the PR comment"
+    required: false
+    default: "WinCC OA log report"
+
+  comment-marker:
+    description: "HTML marker used to upsert a single bot PR comment"
+    required: false
+    default: "<!-- winccoa-logs-to-pr-review -->"
+
+  comment-on-pr:
+    description: "When true, upsert a PR issue comment with the OK/NOK summary"
+    required: false
+    default: "true"
+
+  review-comments:
+    description: >-
+      When true, attempt PR review comments on failed Script/Library lines.
+      Lines outside the PR diff may be skipped; workflow annotations are still emitted.
+    required: false
+    default: "false"
+
+  fail-on-findings:
+    description: "When true, fail the step if any NOK findings remain after filters"
+    required: false
+    default: "false"
+
+  severities:
+    description: >-
+      Comma-separated severities treated as findings
+      (default WARNING,SEVERE,FATAL).
+    required: false
+    default: "WARNING,SEVERE,FATAL"
+
+  include-error-types:
+    description: >-
+      Optional comma-separated error types to include (e.g. CTRL).
+      Empty means all types that match severities.
+    required: false
+    default: ""
+
+  path-strip-prefixes:
+    description: >-
+      Comma-separated path prefixes to strip when normalizing locations
+      (default /workspace/).
+    required: false
+    default: "/workspace/"
+
+  summary-path:
+    description: "Where to write the JSON summary (relative to workspace)"
+    required: false
+    default: ".artifacts/winccoa-log-report.json"
+
+  package-version:
+    description: >-
+      Version or dist-tag of @winccoa-tools-pack/npm-winccoa-log-reader
+      (for example 0.1.1 or latest). Do not use git refs such as main.
+    required: false
+    default: "0.1.1"
+
+  node-version:
+    description: "Node.js major version installed when the environment has no Node"
+    required: false
+    default: "22"
+
+  github-token:
+    description: "Token used for PR comments (defaults to github.token)"
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  ok-count:
+    description: "Number of files seen as checked without matching findings"
+    value: ${{ steps.run.outputs.ok-count }}
+  nok-count:
+    description: "Number of unique files with matching findings"
+    value: ${{ steps.run.outputs.nok-count }}
+  finding-count:
+    description: "Total number of matching log findings"
+    value: ${{ steps.run.outputs.finding-count }}
+  checked-count:
+    description: "Number of unique files discovered as checked (PARAM INFO + findings)"
+    value: ${{ steps.run.outputs.checked-count }}
+  summary-path:
+    description: "Path to the written JSON summary"
+    value: ${{ steps.run.outputs.summary-path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Parse logs and report to PR
+      id: run
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        LOG_PATH: ${{ inputs.log-path }}
+        REPORT_TITLE: ${{ inputs.title }}
+        COMMENT_MARKER: ${{ inputs.comment-marker }}
+        COMMENT_ON_PR: ${{ inputs.comment-on-pr }}
+        REVIEW_COMMENTS: ${{ inputs.review-comments }}
+        FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        SEVERITIES: ${{ inputs.severities }}
+        INCLUDE_ERROR_TYPES: ${{ inputs.include-error-types }}
+        PATH_STRIP_PREFIXES: ${{ inputs.path-strip-prefixes }}
+        SUMMARY_PATH: ${{ inputs.summary-path }}
+        PACKAGE_VERSION: ${{ inputs.package-version }}
+        NODE_VERSION: ${{ inputs.node-version }}
+        GITHUB_TOKEN: ${{ inputs.github-token }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_EVENT_NAME: ${{ github.event_name }}
+        GITHUB_EVENT_PATH: ${{ github.event_path }}
+        GITHUB_SHA: ${{ github.sha }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        GITHUB_SERVER_URL: ${{ github.server_url }}
+        GITHUB_API_URL: ${{ github.api_url }}
+      run: bash "${{ github.action_path }}/scripts/run.sh"

@@ -39,6 +39,7 @@ Optionally registers the project first via
 | Output | Description |
 | --- | --- |
 | `error-count` | Best-effort parsed number of reported errors |
+| `log-path` | Absolute path to the captured syntax log (for `winccoa-logs-to-pr-review`) |
 
 ## Example
 
@@ -55,6 +56,7 @@ jobs:
     permissions:
       contents: read
       packages: read
+      pull-requests: write
     env:
       WINCCOA_IMAGE: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
     steps:
@@ -68,7 +70,9 @@ jobs:
 
       - run: docker pull "$WINCCOA_IMAGE"
 
-      - uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-syntax-check@main
+      - id: syntax
+        continue-on-error: true
+        uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-syntax-check@main
         with:
           path: src/Squirt
           winccoa-version: '3.21'
@@ -77,6 +81,19 @@ jobs:
             en_US.utf8
           fail-on-error: 'true'
           package-version: '0.1.0'
+          log-path: .artifacts/syntax-check.log
+
+      - if: always() && github.event_name == 'pull_request'
+        uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-logs-to-pr-review@main
+        with:
+          log-path: ${{ steps.syntax.outputs.log-path }}
+          title: Syntax check report
+          comment-marker: '<!-- winccoa-syntax-check-report -->'
+          include-error-types: CTRL
+          review-comments: 'true'
+
+      - if: steps.syntax.outcome == 'failure'
+        run: exit 1
 ```
 
 ## Notes
@@ -87,6 +104,8 @@ jobs:
   **runnable** (`--runnable true`) in the **same** host/container as the syntax
   check. A separate Docker register step cannot work: `pvssInst.conf` is not
   shared across containers, and WCCOAui `-syntax` requires a registered project.
+- Full WCCOAui output is written to `log-path` (default `.artifacts/syntax-check.log`)
+  for downstream PR reporting via `winccoa-logs-to-pr-review`.
 - Shell logic lives in `scripts/` (`run.sh`, `run-in-container.sh`, `lib.sh`) so
   `action.yml` stays valid YAML
 

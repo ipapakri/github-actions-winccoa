@@ -79,6 +79,13 @@ inputs:
     required: false
     default: "0.1.0"
 
+  log-path:
+    description: >-
+      Where to write the captured WCCOAui/syntax log (relative to workspace).
+      Consumed by winccoa-logs-to-pr-review.
+    required: false
+    default: ".artifacts/syntax-check.log"
+
   node-version:
     description: "Node.js major version installed when the environment has no Node"
     required: false
@@ -88,6 +95,9 @@ outputs:
   error-count:
     description: "Number of detected syntax errors (best-effort)"
     value: ${{ steps.run.outputs.error-count }}
+  log-path:
+    description: "Path to the captured syntax-check log file"
+    value: ${{ steps.run.outputs.log-path }}
 
 runs:
   using: "composite"
@@ -111,4 +121,5 @@ runs:
         REGISTER_PROJECT: ${{ inputs.register-project }}
         REGISTER_PACKAGE_VERSION: ${{ inputs.register-package-version }}
         LANGUAGES: ${{ inputs.languages }}
+        LOG_PATH: ${{ inputs.log-path }}
       run: bash "${{ github.action_path }}/scripts/run.sh"

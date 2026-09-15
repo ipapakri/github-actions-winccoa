@@ -99,6 +99,17 @@ echo "--- Syntax check output ---"
 printf '%s\n' "${OUTPUT}"
 echo "--- end output ---"
 
+# Persist full output for log-reader / PR reporting
+LOG_REL="${LOG_PATH:-.artifacts/syntax-check.log}"
+if [[ "${LOG_REL}" = /* ]]; then
+  LOG_ABS="${LOG_REL}"
+else
+  LOG_ABS="${GITHUB_WORKSPACE:-$(pwd)}/${LOG_REL}"
+fi
+mkdir -p "$(dirname "${LOG_ABS}")"
+printf '%s\n' "${OUTPUT}" > "${LOG_ABS}"
+echo "Wrote syntax log: ${LOG_ABS}"
+
 ERROR_COUNT=$(printf '%s\n' "${OUTPUT}" | sed -n 's/^error-count=//p' | tail -n1)
 if [ -z "${ERROR_COUNT}" ]; then
   ERROR_COUNT=$(printf '%s\n' "${OUTPUT}" | grep -Eic 'error:|SEVERE|FATAL|syntax error' || true)
@@ -108,7 +119,10 @@ if [ "${ERROR_COUNT}" = "0" ] && [ "${EXIT_CODE}" -ne 0 ]; then
 fi
 
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
-  echo "error-count=${ERROR_COUNT}" >> "${GITHUB_OUTPUT}"
+  {
+    echo "error-count=${ERROR_COUNT}"
+    echo "log-path=${LOG_ABS}"
+  } >> "${GITHUB_OUTPUT}"
 fi
 
 if [ "${EXIT_CODE}" -ne 0 ]; then

@@ -1,0 +1,60 @@
+﻿This plugin does not support createPlatformOpenGLContext!
+  WCCOAui      (0), 2026.09.14 07:56:27.842,	WinCC_OA,	WARNING: Running as root is a security risk and not recommended.
+  
+  WCCOAui      (0), 2026.09.14 07:56:27.842, SYS,  INFO,        1, Manager Start, PROJ, Squirt, V 3.21 - 3.21.3 platform Linux x86_64 linked at May 12 2026 21:23:41 (087c0283f3edc8f7a9e0585862e5d540d597a3b7)
+  WCCOAui      (0), 2026.09.14 07:56:27.842, SYS,  WARNING,   127, PmonTable: did not find the progs-file /workspace/src/Squirt/config/progs
+  WCCOAui      (0), 2026.09.14 07:56:27.876, PARAM,INFO,        0, splash/splashRecord.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.877, PARAM,INFO,        0, libs/classes/splash/Splash.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.878, PARAM,INFO,        0, libs/classes/splash/OaGuiTestScreenCapture.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.878, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestDpTree.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.878, CTRL, WARNING,     9/ctrl, Duplicate identifier "enabled" in function "mapping GuiTestDpTree::getCurrentAttributes()". Location: 
+      Script: /workspace/src/Squirt/scripts/libs/classes/splash/shapes/GuiTestDpTree.ctl
+      Line: 31
+  WCCOAui      (0), 2026.09.14 07:56:27.878, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestTab.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.878, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestTextField.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.879, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestZoomNavigator.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.879, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestPolygon.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.879, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestSlider.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.879, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestThumbWheel.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.880, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestProgressBar.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.880, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestTree.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.880, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestComboBox.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.880, CTRL, WARNING,     9/ctrl, Duplicate identifier "updatesEnabled" in function "mapping GuiTestComboBox::getCurrentAttributes()". Location: 
+      Script: /workspace/src/Squirt/scripts/libs/classes/splash/shapes/GuiTestComboBox.ctl
+      Line: 31
+  WCCOAui      (0), 2026.09.14 07:56:27.880, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestFrame.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.880, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestTable.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.881, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestRadioBox.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.881, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestArc.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.881, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestSpinButton.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.881, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestEllipse.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.881, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestLine.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.882, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestClock.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.882, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestLcd.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.882, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestTrend.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.882, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestEmbeddedModule.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.883, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestCascadeButton.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.883, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestShape.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.883, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestPushButton.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.883, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestDpType.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.883, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestCheckBox.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.883, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestPrimitiveText.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.884, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestLabel.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.884, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestGeneric.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.884, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestRectangle.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.884, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestPipe.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.884, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestSelectionList.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.885, PARAM,INFO,        0, libs/classes/splash/shapes/GuiTestTextEdit.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.885, PARAM,INFO,        0, libs/classes/splash/OaGuiTest.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.891, CTRL, WARNING,    81, Syntax error, 'vp' unexpected, expected ';', /workspace/src/Squirt/scripts/libs/classes/splash/OaGuiTest.ctl,   Line: 134
+      SquirtVp vp = SquirtVp(vpPrefix + vpId, shapes);
+               ^
+  WCCOAui      (0), 2026.09.14 07:56:27.895, PARAM,INFO,        0, libs/classes/SquirtInputEventPlayer.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.896, PARAM,INFO,        0, libs/classes/SquirtVp.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.904, PARAM,INFO,        0, libs/classes/hsp/HspScript.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.910, PARAM,INFO,        0, libs/classes/oaTest/OaTestProjectView.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.911, PARAM,INFO,        0, libs/oaGuiTest.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.919, PARAM,INFO,        0, gedi/projectView.ctl
+  WCCOAui      (0), 2026.09.14 07:56:27.925, PARAM,INFO,        0, splash/cover.pnl
+  WCCOAui      (0), 2026.09.14 07:56:27.926, PARAM,INFO,        0, splash/splash.pnl
+  WCCOAui      (0), 2026.09.14 07:56:27.934, SYS,  INFO,        2, Manager Stop
