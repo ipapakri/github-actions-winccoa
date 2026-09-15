@@ -72,9 +72,57 @@ function preferDisplayPath(a, b) {
 
 function locationFromEntry(entry) {
   const md = entry.metadata || {};
-  const file = md.script || md.library || null;
-  const line = typeof md.line === 'number' ? md.line : null;
+  let file = md.script || md.library || null;
+  let line = typeof md.line === 'number' ? md.line : null;
+
+  // Fallback: parse ", path, Line: N" still present in errorText
+  const text = String(entry.errorText || '');
+  if ((!file || line == null) && text) {
+    const m = text.match(
+      /((?:\/|\w:)?[^\s,]+\.(?:ctl|pnl|xml))\s*,\s*Line:\s*(\d+)/i,
+    );
+    if (m) {
+      file = file || m[1];
+      if (line == null) line = Number.parseInt(m[2], 10);
+    }
+  }
+
+  // Fallback: stacktrace first frame
+  if ((!file || line == null) && Array.isArray(md.stacktrace) && md.stacktrace[0]) {
+    const fr = md.stacktrace[0];
+    file = file || fr.filePath || null;
+    if (line == null && typeof fr.line === 'number') line = fr.line;
+  }
+
   return { file, line };
+}
+
+function cleanMessageText(errorText) {
+  let msg = String(errorText || '').split('\n')[0].trim();
+  // OA often ends with "Location:" when Script/Line follow on next lines
+  msg = msg.replace(/\s*Location:\s*$/i, '').trim();
+  // Drop trailing ", /path, Line: N" if still embedded (already in metadata)
+  msg = msg.replace(
+    /,\s*(?:\/|\w:)?[^\s,]+\.(?:ctl|pnl|xml)\s*,\s*Line:\s*\d+\s*$/i,
+    '',
+  );
+  return msg.trim();
+}
+
+function buildMessage(entry, file, line) {
+  const base = cleanMessageText(entry.errorText);
+  const parts = [base];
+  if (file && file !== '(no-file)') {
+    parts.push(`@ ${file}${line != null ? `:${line}` : ''}`);
+  }
+  const snip = String(entry.metadata?.raw || '')
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)[0];
+  if (snip && !base.includes(snip)) {
+    parts.push(`| ${snip}`);
+  }
+  return parts.join(' ');
 }
 
 function isFinding(entry, severities, includeTypes) {
@@ -104,6 +152,31 @@ function extractCheckedFiles(entries, stripPrefixes) {
     }
   }
   return files;
+}
+
+function serializeEntry(entry, stripPrefixes) {
+  const md = entry.metadata || {};
+  return {
+    managerName: entry.managerName,
+    managerNum: entry.managerNum,
+    identifier: entry.identifier,
+    timeStampString: entry.timeStampString,
+    errorType: entry.errorType,
+    errorPriority: entry.errorPriority,
+    errorCode: entry.errorCode ?? null,
+    errorCatalog: entry.errorCatalog ?? null,
+    errorText: entry.errorText,
+    metadata: {
+      script: md.script ?? null,
+      library: md.library ?? null,
+      line: typeof md.line === 'number' ? md.line : null,
+      raw: md.raw ?? null,
+      stacktrace: md.stacktrace ?? null,
+      scriptNormalized: normalizePath(md.script, stripPrefixes),
+      libraryNormalized: normalizePath(md.library, stripPrefixes),
+    },
+    rawLines: entry.rawLines || [],
+  };
 }
 
 function main() {
@@ -143,11 +216,15 @@ function main() {
   const checkedFromParam = extractCheckedFiles(allEntries, stripPrefixes);
 
   const findings = [];
+  const filteredEntries = [];
   /** @type {Map<string, string>} matchKey -> display path */
   const nokDisplay = new Map();
 
   for (const entry of allEntries) {
     if (!isFinding(entry, severities, includeTypes)) continue;
+
+    filteredEntries.push(serializeEntry(entry, stripPrefixes));
+
     const loc = locationFromEntry(entry);
     let file = normalizePath(loc.file, stripPrefixes);
     if (!file && entry.errorText) {
@@ -172,7 +249,15 @@ function main() {
       }
     }
 
-    const line = loc.line || null;
+    const line = loc.line != null ? loc.line : null;
+    const message = buildMessage(entry, display, line);
+    const snippet = String(entry.metadata?.raw || '')
+      .split('\n')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(' | ');
+
     findings.push({
       file: display,
       matchKey: key,
@@ -181,8 +266,16 @@ function main() {
       errorType: entry.errorType,
       errorCode: entry.errorCode ?? null,
       errorCatalog: entry.errorCatalog ?? null,
-      message: String(entry.errorText || '').split('\n')[0].trim(),
-      raw: (entry.rawLines || []).join('\n'),
+      message,
+      messageRaw: String(entry.errorText || ''),
+      snippet: snippet || null,
+      metadata: {
+        script: entry.metadata?.script ?? null,
+        library: entry.metadata?.library ?? null,
+        line: typeof entry.metadata?.line === 'number' ? entry.metadata.line : null,
+        raw: entry.metadata?.raw ?? null,
+      },
+      rawLines: entry.rawLines || [],
     });
 
     const prev = nokDisplay.get(key);
@@ -202,6 +295,8 @@ function main() {
 
   const checkedCount = okFiles.length + nokList.length + (systemNok ? 1 : 0);
 
+  const summaryFindings = findings.map(({ matchKey, ...rest }) => rest);
+
   const summary = {
     title,
     marker,
@@ -216,7 +311,8 @@ function main() {
     },
     okFiles,
     nokFiles: systemNok ? [...nokList, '(no-file)'] : nokList,
-    findings: findings.map(({ matchKey, ...rest }) => rest),
+    findings: summaryFindings,
+    filteredEntries,
     filters: {
       severities,
       includeErrorTypes: includeTypes,
@@ -230,6 +326,22 @@ function main() {
   fs.mkdirSync(path.dirname(outAbs), { recursive: true });
   fs.writeFileSync(outAbs, JSON.stringify(summary, null, 2), 'utf8');
 
+  // Always print filtered log JSON for CI debugging (line/message verification)
+  console.log('--- filtered-log-json-begin ---');
+  console.log(
+    JSON.stringify(
+      {
+        filters: summary.filters,
+        counts: summary.counts,
+        findings: summaryFindings,
+        filteredEntries,
+      },
+      null,
+      2,
+    ),
+  );
+  console.log('--- filtered-log-json-end ---');
+
   const maxAnnotations = 50;
   for (let i = 0; i < Math.min(findings.length, maxAnnotations); i++) {
     const f = findings[i];
@@ -237,9 +349,10 @@ function main() {
       String(f.severity).toUpperCase() === 'WARNING' ? 'warning' : 'error';
     const filePart =
       f.file && f.file !== '(no-file)'
-        ? `file=${f.file}${f.line ? `,line=${f.line}` : ''}`
+        ? `file=${f.file}${f.line != null ? `,line=${f.line}` : ''}`
         : '';
-    const msg = f.message.replace(/\r?\n/g, ' ').slice(0, 200);
+    // Keep annotation text single-line; include location explicitly in message
+    const msg = f.message.replace(/\r?\n/g, ' ').slice(0, 300);
     if (filePart) {
       console.log(`::${sev} ${filePart}::${msg}`);
     } else {

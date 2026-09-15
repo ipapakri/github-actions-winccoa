@@ -59,6 +59,14 @@ CHECKED_COUNT="${CHECKED_COUNT:-0}"
 echo "OK=${OK_COUNT} NOK=${NOK_COUNT} findings=${FINDING_COUNT} checked=${CHECKED_COUNT}"
 echo "Summary: ${SUMMARY_ABS}"
 
+if [ -f "${SUMMARY_ABS}" ]; then
+  echo "--- summary-json-begin ---"
+  # Full summary including filteredEntries (for line/message debugging)
+  cat "${SUMMARY_ABS}"
+  echo ""
+  echo "--- summary-json-end ---"
+fi
+
 if [ -n "${GITHUB_OUTPUT:-}" ]; then
   {
     echo "ok-count=${OK_COUNT}"

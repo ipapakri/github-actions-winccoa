@@ -44,13 +44,29 @@ async function gh(method, urlPath, body) {
     data = { raw: text };
   }
   if (!res.ok) {
-    const msg = data?.message || text || res.statusText;
-    const err = new Error(`GitHub API ${method} ${urlPath} -> ${res.status}: ${msg}`);
+    const detail =
+      data?.errors?.map((e) => e.message || JSON.stringify(e)).join('; ') ||
+      data?.message ||
+      text ||
+      res.statusText;
+    const err = new Error(
+      `GitHub API ${method} ${urlPath} -> ${res.status}: ${detail}`,
+    );
     err.status = res.status;
     err.data = data;
     throw err;
   }
   return data;
+}
+
+function findingDisplayMessage(f) {
+  // Prefer cleaned message; strip trailing " @ path:line" if Location column already shows it
+  let msg = String(f.message || f.messageRaw || '').trim();
+  msg = msg.replace(/\s*Location:\s*$/i, '').trim();
+  if (f.snippet && !msg.includes(f.snippet.split(' | ')[0])) {
+    msg = `${msg} | ${f.snippet}`;
+  }
+  return msg;
 }
 
 function buildCommentBody(summary) {
@@ -67,11 +83,14 @@ function buildCommentBody(summary) {
   const top = (summary.findings || []).slice(0, 20).map((f) => {
     const loc =
       f.file && f.file !== '(no-file)'
-        ? f.line
+        ? f.line != null
           ? `\`${f.file}:${f.line}\``
           : `\`${f.file}\``
         : '_no file_';
-    return `| ${f.severity || '?'} | ${loc} | ${escapeCell(f.message || '')} |`;
+    // Message column: cleaned text without redundant @path (location has it)
+    let msg = findingDisplayMessage(f);
+    msg = msg.replace(/\s+@\s+[^\s|]+(?::\d+)?/g, '').trim();
+    return `| ${f.severity || '?'} | ${loc} | ${escapeCell(msg)} |`;
   });
 
   const lines = [
@@ -104,6 +123,10 @@ function buildCommentBody(summary) {
     lines.push('| --- | --- | --- |');
     lines.push(...top);
     lines.push('');
+    lines.push(
+      '_Line numbers come from WinCC OA log metadata (`Script`/`Library`/`Line`)._',
+      '',
+    );
   } else {
     lines.push('_No matching findings._', '');
   }
@@ -119,7 +142,28 @@ function buildCommentBody(summary) {
 }
 
 function escapeCell(s) {
-  return String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').slice(0, 180);
+  return String(s).replace(/\|/g, '\\|').replace(/\r?\n/g, ' ').slice(0, 220);
+}
+
+function reviewBodyForFinding(f) {
+  const parts = [
+    `**${f.severity || 'WARNING'}** (WinCC OA)`,
+    '',
+    findingDisplayMessage(f),
+  ];
+  if (f.metadata?.line != null || f.line != null) {
+    parts.push('');
+    parts.push(
+      `Log location: line **${f.line ?? f.metadata?.line}**` +
+        (f.metadata?.script || f.metadata?.library
+          ? ` (${f.metadata?.script || f.metadata?.library})`
+          : ''),
+    );
+  }
+  if (Array.isArray(f.rawLines) && f.rawLines.length) {
+    parts.push('', '```', ...f.rawLines.map((l) => String(l)), '```');
+  }
+  return parts.join('\n');
 }
 
 async function upsertIssueComment(owner, repo, issueNumber, body, marker) {
@@ -148,11 +192,10 @@ async function upsertIssueComment(owner, repo, issueNumber, body, marker) {
 }
 
 async function createReview(owner, repo, pullNumber, commitId, findings) {
-  // Prefer a single review with multiple comments; fall back silently on 422.
   const comments = [];
   const seen = new Set();
   for (const f of findings) {
-    if (!f.file || f.file === '(no-file)' || !f.line) continue;
+    if (!f.file || f.file === '(no-file)' || f.line == null) continue;
     const key = `${f.file}:${f.line}:${f.message}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -160,7 +203,8 @@ async function createReview(owner, repo, pullNumber, commitId, findings) {
       path: f.file,
       line: f.line,
       side: 'RIGHT',
-      body: `**${f.severity || 'WARNING'}** (WinCC OA)\n\n${f.message}`,
+      body: reviewBodyForFinding(f),
+      finding: f,
     });
     if (comments.length >= 30) break;
   }
@@ -168,6 +212,13 @@ async function createReview(owner, repo, pullNumber, commitId, findings) {
     console.log('No line-anchored findings for review comments');
     return;
   }
+
+  const batch = comments.map(({ path, line, side, body }) => ({
+    path,
+    line,
+    side,
+    body,
+  }));
 
   try {
     const review = await gh(
@@ -177,34 +228,54 @@ async function createReview(owner, repo, pullNumber, commitId, findings) {
         commit_id: commitId,
         event: 'COMMENT',
         body: 'Automated WinCC OA log findings (line comments).',
-        comments,
+        comments: batch,
       },
     );
-    console.log(`Created PR review ${review.id} with ${comments.length} comment(s)`);
+    console.log(
+      `Created PR review ${review.id} with ${comments.length} comment(s)`,
+    );
+    return;
   } catch (err) {
-    // Diff-line mismatches often 422 — try one-by-one to post what we can.
     console.log(
       `::warning::Batch review failed (${err.message}); trying individual comments`,
     );
-    let ok = 0;
-    for (const c of comments) {
-      try {
-        await gh('POST', `/repos/${owner}/${repo}/pulls/${pullNumber}/comments`, {
-          commit_id: commitId,
-          path: c.path,
-          line: c.line,
-          side: 'RIGHT',
-          body: c.body,
-        });
-        ok += 1;
-      } catch (e2) {
-        console.log(
-          `::warning::Skipped review comment ${c.path}:${c.line} (${e2.message})`,
-        );
-      }
-    }
-    console.log(`Posted ${ok}/${comments.length} individual review comment(s)`);
   }
+
+  let ok = 0;
+  for (const c of comments) {
+    try {
+      await gh('POST', `/repos/${owner}/${repo}/pulls/${pullNumber}/comments`, {
+        commit_id: commitId,
+        path: c.path,
+        line: c.line,
+        side: 'RIGHT',
+        body: c.body,
+      });
+      ok += 1;
+      continue;
+    } catch (e2) {
+      console.log(
+        `::warning::Line review comment failed ${c.path}:${c.line} (${e2.message})`,
+      );
+    }
+
+    // Fallback: file-level comment (works even when line is outside the PR diff)
+    try {
+      await gh('POST', `/repos/${owner}/${repo}/pulls/${pullNumber}/comments`, {
+        commit_id: commitId,
+        path: c.path,
+        subject_type: 'file',
+        body: `${c.body}\n\n_Note: line ${c.line} is outside the PR diff, so this is a file-level comment._`,
+      });
+      ok += 1;
+      console.log(`Posted file-level review comment for ${c.path}:${c.line}`);
+    } catch (e3) {
+      console.log(
+        `::warning::Skipped review comment ${c.path}:${c.line} (${e3.message})`,
+      );
+    }
+  }
+  console.log(`Posted ${ok}/${comments.length} individual review comment(s)`);
 }
 
 async function main() {
@@ -219,7 +290,9 @@ async function main() {
     String(process.env.REVIEW_COMMENTS || 'false') === 'true';
 
   if (!commentOnPr && !reviewComments) {
-    console.log('PR reporting disabled (comment-on-pr and review-comments false)');
+    console.log(
+      'PR reporting disabled (comment-on-pr and review-comments false)',
+    );
     return;
   }
 
@@ -256,7 +329,13 @@ async function main() {
     if (!commitId) {
       console.log('::warning::No commit SHA for review comments');
     } else {
-      await createReview(owner, repo, pr.number, commitId, summary.findings || []);
+      await createReview(
+        owner,
+        repo,
+        pr.number,
+        commitId,
+        summary.findings || [],
+      );
     }
   }
 }
