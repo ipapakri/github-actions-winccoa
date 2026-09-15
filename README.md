@@ -77,7 +77,10 @@ warnings for PR reporting or quality gates.
 ### winccoa-logs-to-pr-review
 
 Parse classic WinCC OA logs with `@winccoa-tools-pack/npm-winccoa-log-reader`
-and post an OK/NOK PR summary (optional line review comments).
+and post an OK/NOK PR summary (optional line review comments). Supports
+optional ignore of findings outside the PR’s changed files (default off) for
+legacy baseline noise. See the [action README](actions/winccoa-logs-to-pr-review/README.md)
+for screenshots of the summary comment, inline review, and out-of-range fallback.
 
 ```yaml
 - uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-logs-to-pr-review@main
@@ -86,6 +89,8 @@ and post an OK/NOK PR summary (optional line review comments).
     title: Syntax check report
     include-error-types: CTRL
     review-comments: 'true'
+    # optional (default false): only treat findings in PR-touched files as active
+    ignore-outside-pr-changes: 'true'
 ```
 
 ## Runtime and compatibility
