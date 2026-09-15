@@ -60,7 +60,6 @@ async function gh(method, urlPath, body) {
 }
 
 function findingDisplayMessage(f) {
-  // Prefer cleaned message; strip trailing " @ path:line" if Location column already shows it
   let msg = String(f.message || f.messageRaw || '').trim();
   msg = msg.replace(/\s*Location:\s*$/i, '').trim();
   if (f.snippet && !msg.includes(f.snippet.split(' | ')[0])) {
@@ -80,6 +79,11 @@ function buildCommentBody(summary) {
       ? `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
       : '';
 
+  const ignoredCount =
+    c.findingsIgnored ?? (summary.findingsIgnored || []).length ?? 0;
+  const totalFindings = c.findingsTotal ?? (c.findings ?? 0) + ignoredCount;
+  const ignoreApplied = Boolean(summary.prChanges?.applied);
+
   const top = (summary.findings || []).slice(0, 20).map((f) => {
     const loc =
       f.file && f.file !== '(no-file)'
@@ -87,7 +91,6 @@ function buildCommentBody(summary) {
           ? `\`${f.file}:${f.line}\``
           : `\`${f.file}\``
         : '_no file_';
-    // Message column: cleaned text without redundant @path (location has it)
     let msg = findingDisplayMessage(f);
     msg = msg.replace(/\s+@\s+[^\s|]+(?::\d+)?/g, '').trim();
     return `| ${f.severity || '?'} | ${loc} | ${escapeCell(msg)} |`;
@@ -97,17 +100,27 @@ function buildCommentBody(summary) {
     marker,
     `## ${title}`,
     '',
-    `| Metric | Count |`,
-    `| --- | ---: |`,
+    '| Metric | Count |',
+    '| --- | ---: |',
     `| Checked files | ${c.checked ?? 0} |`,
     `| OK | ${c.ok ?? 0} |`,
-    `| NOK | ${c.nok ?? 0} |`,
-    `| Findings | ${c.findings ?? 0} |`,
-    '',
+    `| NOK (active) | ${c.nok ?? 0} |`,
+    `| Findings (active) | ${c.findings ?? 0} |`,
   ];
+  if (ignoreApplied || ignoredCount > 0) {
+    lines.push(`| Findings ignored (outside PR) | ${ignoredCount} |`);
+    lines.push(`| Findings total | ${totalFindings} |`);
+  }
+  lines.push('');
+  if (ignoreApplied) {
+    lines.push(
+      `> ignore-outside-pr-changes is **on**: only findings in PR-changed files are active (${summary.prChanges?.changedFileCount ?? 0} file(s) in PR).`,
+      '',
+    );
+  }
 
   if ((summary.nokFiles || []).length > 0) {
-    lines.push('### NOK files', '');
+    lines.push('### NOK files (active)', '');
     for (const f of summary.nokFiles.slice(0, 40)) {
       lines.push(`- \`${f}\``);
     }
@@ -118,7 +131,7 @@ function buildCommentBody(summary) {
   }
 
   if (top.length > 0) {
-    lines.push('### Findings (top 20)', '');
+    lines.push('### Findings (active, top 20)', '');
     lines.push('| Severity | Location | Message |');
     lines.push('| --- | --- | --- |');
     lines.push(...top);
@@ -128,7 +141,30 @@ function buildCommentBody(summary) {
       '',
     );
   } else {
-    lines.push('_No matching findings._', '');
+    lines.push('_No active matching findings._', '');
+  }
+
+  const ignored = summary.findingsIgnored || [];
+  if (ignored.length > 0) {
+    lines.push('### Ignored findings (outside PR changes)', '');
+    for (const f of ignored.slice(0, 15)) {
+      const loc =
+        f.file && f.file !== '(no-file)'
+          ? f.line != null
+            ? `\`${f.file}:${f.line}\``
+            : `\`${f.file}\``
+          : '_no file_';
+      const msg = escapeCell(
+        findingDisplayMessage(f)
+          .replace(/\s+@\s+[^\s|]+(?::\d+)?/g, '')
+          .trim(),
+      );
+      lines.push(`- ${loc}: ${msg}`);
+    }
+    if (ignored.length > 15) {
+      lines.push(`- … and ${ignored.length - 15} more`);
+    }
+    lines.push('');
   }
 
   if (runUrl) {
@@ -196,6 +232,7 @@ async function createReview(owner, repo, pullNumber, commitId, findings) {
   const seen = new Set();
   for (const f of findings) {
     if (!f.file || f.file === '(no-file)' || f.line == null) continue;
+    if (f.ignored) continue;
     const key = `${f.file}:${f.line}:${f.message}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -259,13 +296,13 @@ async function createReview(owner, repo, pullNumber, commitId, findings) {
       );
     }
 
-    // Fallback: file-level comment (works even when line is outside the PR diff)
     try {
       await gh('POST', `/repos/${owner}/${repo}/pulls/${pullNumber}/comments`, {
         commit_id: commitId,
         path: c.path,
         subject_type: 'file',
-        body: `${c.body}\n\n_Note: line ${c.line} is outside the PR diff, so this is a file-level comment._`,
+        body:
+          `${c.body}\n\n_Note: line ${c.line} is outside the PR diff, so this is a file-level comment._`,
       });
       ok += 1;
       console.log(`Posted file-level review comment for ${c.path}:${c.line}`);

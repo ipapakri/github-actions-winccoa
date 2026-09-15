@@ -36,8 +36,14 @@ fi
 export LOG_PATH="${LOG_ABS}"
 export SUMMARY_PATH="${SUMMARY_ABS}"
 export LOG_READER_PKG_ROOT="${PKG_ROOT}"
+export IGNORE_OUTSIDE_PR_CHANGES="${IGNORE_OUTSIDE_PR_CHANGES:-false}"
+export ANNOTATE_IGNORED="${ANNOTATE_IGNORED:-false}"
 
 echo "Building report from ${LOG_ABS}"
+if [ "${IGNORE_OUTSIDE_PR_CHANGES}" = "true" ]; then
+  echo "ignore-outside-pr-changes=true (findings outside PR files will be ignored)"
+fi
+
 REPORT_OUT="$(node "${SCRIPT_DIR}/build-report.mjs")"
 printf '%s\n' "${REPORT_OUT}"
 
@@ -45,6 +51,8 @@ printf '%s\n' "${REPORT_OUT}"
 OK_COUNT="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^OK_COUNT=//p' | tail -n1)"
 NOK_COUNT="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^NOK_COUNT=//p' | tail -n1)"
 FINDING_COUNT="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^FINDING_COUNT=//p' | tail -n1)"
+FINDING_COUNT_TOTAL="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^FINDING_COUNT_TOTAL=//p' | tail -n1)"
+IGNORED_COUNT="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^IGNORED_COUNT=//p' | tail -n1)"
 CHECKED_COUNT="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^CHECKED_COUNT=//p' | tail -n1)"
 SUMMARY_FROM_NODE="$(printf '%s\n' "${REPORT_OUT}" | sed -n 's/^SUMMARY_PATH=//p' | tail -n1)"
 if [ -n "${SUMMARY_FROM_NODE}" ]; then
@@ -54,14 +62,15 @@ fi
 OK_COUNT="${OK_COUNT:-0}"
 NOK_COUNT="${NOK_COUNT:-0}"
 FINDING_COUNT="${FINDING_COUNT:-0}"
+FINDING_COUNT_TOTAL="${FINDING_COUNT_TOTAL:-${FINDING_COUNT}}"
+IGNORED_COUNT="${IGNORED_COUNT:-0}"
 CHECKED_COUNT="${CHECKED_COUNT:-0}"
 
-echo "OK=${OK_COUNT} NOK=${NOK_COUNT} findings=${FINDING_COUNT} checked=${CHECKED_COUNT}"
+echo "OK=${OK_COUNT} NOK=${NOK_COUNT} findings=${FINDING_COUNT} total=${FINDING_COUNT_TOTAL} ignored=${IGNORED_COUNT} checked=${CHECKED_COUNT}"
 echo "Summary: ${SUMMARY_ABS}"
 
 if [ -f "${SUMMARY_ABS}" ]; then
   echo "--- summary-json-begin ---"
-  # Full summary including filteredEntries (for line/message debugging)
   cat "${SUMMARY_ABS}"
   echo ""
   echo "--- summary-json-end ---"
@@ -72,6 +81,8 @@ if [ -n "${GITHUB_OUTPUT:-}" ]; then
     echo "ok-count=${OK_COUNT}"
     echo "nok-count=${NOK_COUNT}"
     echo "finding-count=${FINDING_COUNT}"
+    echo "finding-count-total=${FINDING_COUNT_TOTAL}"
+    echo "ignored-count=${IGNORED_COUNT}"
     echo "checked-count=${CHECKED_COUNT}"
     echo "summary-path=${SUMMARY_ABS}"
   } >> "${GITHUB_OUTPUT}"
@@ -82,7 +93,12 @@ if [ "${COMMENT_ON_PR:-true}" = "true" ] || [ "${REVIEW_COMMENTS:-false}" = "tru
   node "${SCRIPT_DIR}/post-pr.mjs"
 fi
 
+# Fail only on active (non-ignored) findings
 if [ "${FAIL_ON_FINDINGS:-false}" = "true" ] && [ "${FINDING_COUNT}" -gt 0 ]; then
-  echo "::error::Failing due to ${FINDING_COUNT} log finding(s) (NOK files: ${NOK_COUNT})"
+  echo "::error::Failing due to ${FINDING_COUNT} active log finding(s) (NOK files: ${NOK_COUNT}; ignored: ${IGNORED_COUNT})"
   exit 1
+fi
+
+if [ "${IGNORE_OUTSIDE_PR_CHANGES}" = "true" ] && [ "${IGNORED_COUNT}" -gt 0 ] && [ "${FINDING_COUNT}" -eq 0 ]; then
+  echo "All ${IGNORED_COUNT} finding(s) were outside PR changes and were ignored."
 fi

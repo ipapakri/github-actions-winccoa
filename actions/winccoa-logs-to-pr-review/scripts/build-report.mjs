@@ -4,7 +4,8 @@
  *
  * Env:
  *   LOG_PATH, SUMMARY_PATH, SEVERITIES, INCLUDE_ERROR_TYPES,
- *   PATH_STRIP_PREFIXES, REPORT_TITLE, COMMENT_MARKER, GITHUB_WORKSPACE
+ *   PATH_STRIP_PREFIXES, REPORT_TITLE, COMMENT_MARKER, GITHUB_WORKSPACE,
+ *   IGNORE_OUTSIDE_PR_CHANGES, GITHUB_TOKEN, GITHUB_*, ANNOTATE_IGNORED
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -50,11 +51,6 @@ function normalizePath(raw, stripPrefixes) {
   return p || null;
 }
 
-/**
- * PARAM INFO paths are often project-relative (libs/foo.ctl), while Script/
- * Library metadata is often workspace-absolute after strip
- * (src/Squirt/scripts/libs/foo.ctl). Treat suffix matches as the same file.
- */
 function pathsReferToSameFile(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
@@ -75,7 +71,6 @@ function locationFromEntry(entry) {
   let file = md.script || md.library || null;
   let line = typeof md.line === 'number' ? md.line : null;
 
-  // Fallback: parse ", path, Line: N" still present in errorText
   const text = String(entry.errorText || '');
   if ((!file || line == null) && text) {
     const m = text.match(
@@ -87,7 +82,6 @@ function locationFromEntry(entry) {
     }
   }
 
-  // Fallback: stacktrace first frame
   if ((!file || line == null) && Array.isArray(md.stacktrace) && md.stacktrace[0]) {
     const fr = md.stacktrace[0];
     file = file || fr.filePath || null;
@@ -99,9 +93,7 @@ function locationFromEntry(entry) {
 
 function cleanMessageText(errorText) {
   let msg = String(errorText || '').split('\n')[0].trim();
-  // OA often ends with "Location:" when Script/Line follow on next lines
   msg = msg.replace(/\s*Location:\s*$/i, '').trim();
-  // Drop trailing ", /path, Line: N" if still embedded (already in metadata)
   msg = msg.replace(
     /,\s*(?:\/|\w:)?[^\s,]+\.(?:ctl|pnl|xml)\s*,\s*Line:\s*\d+\s*$/i,
     '',
@@ -179,7 +171,125 @@ function serializeEntry(entry, stripPrefixes) {
   };
 }
 
-function main() {
+function eventPayload() {
+  const p = process.env.GITHUB_EVENT_PATH;
+  if (!p || !fs.existsSync(p)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async function ghGet(urlPath) {
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) {
+    throw new Error('GITHUB_TOKEN is required to list PR changed files');
+  }
+  const base = (process.env.GITHUB_API_URL || 'https://api.github.com').replace(
+    /\/$/,
+    '',
+  );
+  const res = await fetch(`${base}${urlPath}`, {
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'winccoa-logs-to-pr-review',
+    },
+  });
+  const text = await res.text();
+  let data = null;
+  try {
+    data = text ? JSON.parse(text) : null;
+  } catch {
+    data = { raw: text };
+  }
+  if (!res.ok) {
+    throw new Error(
+      `GitHub API GET ${urlPath} -> ${res.status}: ${data?.message || text}`,
+    );
+  }
+  return data;
+}
+
+/**
+ * Load repo-relative paths changed in the current pull_request (file-level).
+ * Returns null when ignore mode is off or not a PR / unavailable.
+ */
+async function loadPrChangedFiles(enabled) {
+  if (!enabled) {
+    return { enabled: false, files: [], source: 'disabled' };
+  }
+  if (process.env.GITHUB_EVENT_NAME !== 'pull_request') {
+    console.log(
+      'ignore-outside-pr-changes is true but event is not pull_request; no ignore applied',
+    );
+    return { enabled: false, files: [], source: 'not-pull_request' };
+  }
+
+  const payload = eventPayload();
+  const prNumber = payload?.pull_request?.number;
+  const [owner, repo] = String(process.env.GITHUB_REPOSITORY || '').split('/');
+  if (!prNumber || !owner || !repo) {
+    console.log(
+      '::warning::ignore-outside-pr-changes requested but PR context is incomplete; no ignore applied',
+    );
+    return { enabled: false, files: [], source: 'missing-pr-context' };
+  }
+
+  const files = [];
+  let page = 1;
+  const perPage = 100;
+  while (page <= 30) {
+    const batch = await ghGet(
+      `/repos/${owner}/${repo}/pulls/${prNumber}/files?per_page=${perPage}&page=${page}`,
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const f of batch) {
+      if (f?.filename) files.push(String(f.filename).replace(/\\/g, '/'));
+      if (f?.previous_filename) {
+        files.push(String(f.previous_filename).replace(/\\/g, '/'));
+      }
+    }
+    if (batch.length < perPage) break;
+    page += 1;
+  }
+
+  const unique = [...new Set(files)].sort();
+  console.log(
+    `PR #${prNumber} changed files for ignore filter: ${unique.length}`,
+  );
+  return { enabled: true, files: unique, source: 'pull_request_files', prNumber };
+}
+
+function findingTouchesPrChanges(finding, changedFiles) {
+  if (!finding?.file || finding.file === '(no-file)') {
+    // System-level findings have no file: treat as in-scope (do not ignore)
+    return true;
+  }
+  return changedFiles.some((cf) => pathsReferToSameFile(finding.file, cf));
+}
+
+function rebuildNokFromFindings(findings) {
+  const nokDisplay = new Map();
+  for (const f of findings) {
+    const key = f.matchKey || f.file;
+    const prev = nokDisplay.get(key);
+    nokDisplay.set(key, preferDisplayPath(prev, f.file));
+  }
+  const nokList = [...nokDisplay.entries()]
+    .filter(([k]) => k !== '(no-file)')
+    .map(([, display]) => display)
+    .sort();
+  const systemNok = nokDisplay.has('(no-file)');
+  return {
+    nokFiles: systemNok ? [...nokList, '(no-file)'] : nokList,
+    nokCount: nokList.length + (systemNok ? 1 : 0),
+  };
+}
+
+async function main() {
   const logPath = process.env.LOG_PATH;
   const summaryPath =
     process.env.SUMMARY_PATH || '.artifacts/winccoa-log-report.json';
@@ -187,6 +297,11 @@ function main() {
   const title = process.env.REPORT_TITLE || 'WinCC OA log report';
   const marker =
     process.env.COMMENT_MARKER || '<!-- winccoa-logs-to-pr-review -->';
+  const ignoreOutside =
+    String(process.env.IGNORE_OUTSIDE_PR_CHANGES || 'false') === 'true';
+  // When ignoring outside changes, do not annotate ignored findings by default
+  const annotateIgnored =
+    String(process.env.ANNOTATE_IGNORED || 'false') === 'true';
 
   if (!logPath || !fs.existsSync(logPath)) {
     console.error(`::error::Log file not found: ${logPath}`);
@@ -217,8 +332,6 @@ function main() {
 
   const findings = [];
   const filteredEntries = [];
-  /** @type {Map<string, string>} matchKey -> display path */
-  const nokDisplay = new Map();
 
   for (const entry of allEntries) {
     if (!isFinding(entry, severities, includeTypes)) continue;
@@ -269,33 +382,46 @@ function main() {
       message,
       messageRaw: String(entry.errorText || ''),
       snippet: snippet || null,
+      inPrChanges: true,
+      ignored: false,
       metadata: {
         script: entry.metadata?.script ?? null,
         library: entry.metadata?.library ?? null,
-        line: typeof entry.metadata?.line === 'number' ? entry.metadata.line : null,
+        line:
+          typeof entry.metadata?.line === 'number' ? entry.metadata.line : null,
         raw: entry.metadata?.raw ?? null,
       },
       rawLines: entry.rawLines || [],
     });
-
-    const prev = nokDisplay.get(key);
-    nokDisplay.set(key, preferDisplayPath(prev, display));
   }
 
-  const nokKeys = [...nokDisplay.keys()];
+  const prChanges = await loadPrChangedFiles(ignoreOutside);
+  let activeFindings = findings;
+  let ignoredFindings = [];
+
+  if (prChanges.enabled) {
+    for (const f of findings) {
+      const inPr = findingTouchesPrChanges(f, prChanges.files);
+      f.inPrChanges = inPr;
+      f.ignored = !inPr;
+    }
+    activeFindings = findings.filter((f) => !f.ignored);
+    ignoredFindings = findings.filter((f) => f.ignored);
+    console.log(
+      `ignore-outside-pr-changes: total=${findings.length} active=${activeFindings.length} ignored=${ignoredFindings.length}`,
+    );
+  }
+
+  // OK/NOK based on active findings only (when ignore is on, outside files do not make NOK)
+  const { nokFiles, nokCount } = rebuildNokFromFindings(activeFindings);
+  const nokKeys = activeFindings.map((f) => f.matchKey || f.file);
   const okFiles = [...checkedFromParam]
     .filter((f) => !nokKeys.some((k) => pathsReferToSameFile(f, k)))
     .sort();
+  const checkedCount = okFiles.length + nokCount;
 
-  const nokList = [...nokDisplay.entries()]
-    .filter(([k]) => k !== '(no-file)')
-    .map(([, display]) => display)
-    .sort();
-  const systemNok = nokDisplay.has('(no-file)');
-
-  const checkedCount = okFiles.length + nokList.length + (systemNok ? 1 : 0);
-
-  const summaryFindings = findings.map(({ matchKey, ...rest }) => rest);
+  const summaryFindings = activeFindings.map(({ matchKey, ...rest }) => rest);
+  const summaryIgnored = ignoredFindings.map(({ matchKey, ...rest }) => rest);
 
   const summary = {
     title,
@@ -305,18 +431,30 @@ function main() {
     counts: {
       checked: checkedCount,
       ok: okFiles.length,
-      nok: nokList.length + (systemNok ? 1 : 0),
-      findings: findings.length,
+      nok: nokCount,
+      findings: activeFindings.length,
+      findingsTotal: findings.length,
+      findingsIgnored: ignoredFindings.length,
       paramInfoFiles: checkedFromParam.size,
     },
     okFiles,
-    nokFiles: systemNok ? [...nokList, '(no-file)'] : nokList,
+    nokFiles,
     findings: summaryFindings,
+    findingsIgnored: summaryIgnored,
     filteredEntries,
+    prChanges: {
+      ignoreOutsidePrChanges: ignoreOutside,
+      applied: prChanges.enabled,
+      source: prChanges.source,
+      prNumber: prChanges.prNumber ?? null,
+      changedFileCount: prChanges.files.length,
+      changedFiles: prChanges.files,
+    },
     filters: {
       severities,
       includeErrorTypes: includeTypes,
       pathStripPrefixes: stripPrefixes,
+      ignoreOutsidePrChanges: ignoreOutside,
     },
   };
 
@@ -326,14 +464,15 @@ function main() {
   fs.mkdirSync(path.dirname(outAbs), { recursive: true });
   fs.writeFileSync(outAbs, JSON.stringify(summary, null, 2), 'utf8');
 
-  // Always print filtered log JSON for CI debugging (line/message verification)
   console.log('--- filtered-log-json-begin ---');
   console.log(
     JSON.stringify(
       {
         filters: summary.filters,
+        prChanges: summary.prChanges,
         counts: summary.counts,
         findings: summaryFindings,
+        findingsIgnored: summaryIgnored,
         filteredEntries,
       },
       null,
@@ -342,26 +481,34 @@ function main() {
   );
   console.log('--- filtered-log-json-end ---');
 
+  const toAnnotate = annotateIgnored
+    ? findings
+    : activeFindings;
   const maxAnnotations = 50;
-  for (let i = 0; i < Math.min(findings.length, maxAnnotations); i++) {
-    const f = findings[i];
+  for (let i = 0; i < Math.min(toAnnotate.length, maxAnnotations); i++) {
+    const f = toAnnotate[i];
     const sev =
       String(f.severity).toUpperCase() === 'WARNING' ? 'warning' : 'error';
     const filePart =
       f.file && f.file !== '(no-file)'
         ? `file=${f.file}${f.line != null ? `,line=${f.line}` : ''}`
         : '';
-    // Keep annotation text single-line; include location explicitly in message
-    const msg = f.message.replace(/\r?\n/g, ' ').slice(0, 300);
+    const prefix = f.ignored ? '[ignored outside PR] ' : '';
+    const msg = `${prefix}${f.message}`.replace(/\r?\n/g, ' ').slice(0, 300);
     if (filePart) {
       console.log(`::${sev} ${filePart}::${msg}`);
     } else {
       console.log(`::${sev}::${msg}`);
     }
   }
-  if (findings.length > maxAnnotations) {
+  if (toAnnotate.length > maxAnnotations) {
     console.log(
-      `::warning::${findings.length - maxAnnotations} additional findings omitted from annotations`,
+      `::warning::${toAnnotate.length - maxAnnotations} additional findings omitted from annotations`,
+    );
+  }
+  if (ignoredFindings.length > 0 && !annotateIgnored) {
+    console.log(
+      `::notice::Ignored ${ignoredFindings.length} finding(s) outside PR changed files (ignore-outside-pr-changes=true)`,
     );
   }
 
@@ -369,7 +516,12 @@ function main() {
   console.log(`OK_COUNT=${summary.counts.ok}`);
   console.log(`NOK_COUNT=${summary.counts.nok}`);
   console.log(`FINDING_COUNT=${summary.counts.findings}`);
+  console.log(`FINDING_COUNT_TOTAL=${summary.counts.findingsTotal}`);
+  console.log(`IGNORED_COUNT=${summary.counts.findingsIgnored}`);
   console.log(`CHECKED_COUNT=${summary.counts.checked}`);
 }
 
-main();
+main().catch((err) => {
+  console.error(`::error::${err.message}`);
+  process.exit(1);
+});

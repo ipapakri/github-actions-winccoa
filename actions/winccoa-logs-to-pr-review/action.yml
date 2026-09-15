@@ -32,7 +32,25 @@ inputs:
     default: "false"
 
   fail-on-findings:
-    description: "When true, fail the step if any NOK findings remain after filters"
+    description: >-
+      When true, fail the step if any active (non-ignored) findings remain after
+      filters.
+    required: false
+    default: "false"
+
+  ignore-outside-pr-changes:
+    description: >-
+      When true on pull_request events, findings in files not changed in the PR
+      are ignored for NOK counts, annotations, review comments, PR report focus,
+      and fail-on-findings. Default false (report everything). Useful for legacy
+      repos that already have baseline syntax issues.
+    required: false
+    default: "false"
+
+  annotate-ignored:
+    description: >-
+      When ignore-outside-pr-changes is true, still emit workflow annotations for
+      ignored findings (default false).
     required: false
     default: "false"
 
@@ -75,20 +93,26 @@ inputs:
     default: "22"
 
   github-token:
-    description: "Token used for PR comments (defaults to github.token)"
+    description: "Token used for PR comments and PR file listing (defaults to github.token)"
     required: false
     default: ${{ github.token }}
 
 outputs:
   ok-count:
-    description: "Number of files seen as checked without matching findings"
+    description: "Number of files seen as checked without matching active findings"
     value: ${{ steps.run.outputs.ok-count }}
   nok-count:
-    description: "Number of unique files with matching findings"
+    description: "Number of unique files with active (non-ignored) findings"
     value: ${{ steps.run.outputs.nok-count }}
   finding-count:
-    description: "Total number of matching log findings"
+    description: "Number of active (non-ignored) matching log findings"
     value: ${{ steps.run.outputs.finding-count }}
+  finding-count-total:
+    description: "Total matching findings before ignore-outside-pr-changes"
+    value: ${{ steps.run.outputs.finding-count-total }}
+  ignored-count:
+    description: "Number of findings ignored because outside PR changes"
+    value: ${{ steps.run.outputs.ignored-count }}
   checked-count:
     description: "Number of unique files discovered as checked (PARAM INFO + findings)"
     value: ${{ steps.run.outputs.checked-count }}
@@ -110,6 +134,8 @@ runs:
         COMMENT_ON_PR: ${{ inputs.comment-on-pr }}
         REVIEW_COMMENTS: ${{ inputs.review-comments }}
         FAIL_ON_FINDINGS: ${{ inputs.fail-on-findings }}
+        IGNORE_OUTSIDE_PR_CHANGES: ${{ inputs.ignore-outside-pr-changes }}
+        ANNOTATE_IGNORED: ${{ inputs.annotate-ignored }}
         SEVERITIES: ${{ inputs.severities }}
         INCLUDE_ERROR_TYPES: ${{ inputs.include-error-types }}
         PATH_STRIP_PREFIXES: ${{ inputs.path-strip-prefixes }}
