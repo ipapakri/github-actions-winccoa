@@ -83,8 +83,15 @@ jobs:
 
 - OK inventory prefers `PARAM,INFO` lines emitted while WCCOAui walks files.
   If those lines are missing, OK may be `0` and only NOK files are listed.
-- Review comments only attach to lines present in the PR diff; others are skipped
-  with a warning. Annotations still show in the Checks UI.
+- The step prints `--- filtered-log-json-begin ---` … with full filtered entries
+  (`metadata.line`, `rawLines`, cleaned `message`) plus the summary JSON for
+  debugging location/message issues in the job log.
+- Line numbers come from WinCC OA log metadata (`Script` / `Library` / `Line`).
+  For duplicate-identifier warnings OA often points at the **function** line,
+  not the second declaration line.
+- Review comments only attach to lines present in the PR diff; otherwise the
+  action falls back to a **file-level** review comment. Annotations still show
+  in the Checks UI.
 - Never pin the npm package to a git ref such as `main`.
 
 ---
