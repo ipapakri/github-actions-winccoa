@@ -115,6 +115,9 @@ jobs:
 - Review comments only attach to lines present in the PR diff; otherwise the
   action falls back to a **file-level** review comment. Annotations still show
   in the Checks UI.
+- Review line comments are **replaced each run**: previous bot comments from
+  this action are deleted before new ones are posted, so re-runs do not stack
+  duplicates. The PR summary issue comment is upserted via `comment-marker`.
 - `ignore-outside-pr-changes` matches at **file** level (not hunk/line). Findings
   with no file path stay active. Ignored findings still appear in the PR comment
   under a separate section; they do not count toward NOK / `fail-on-findings` /

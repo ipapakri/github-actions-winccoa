@@ -4,9 +4,14 @@
  * Uses GitHub REST API with GITHUB_TOKEN.
  *
  * Env: SUMMARY_PATH, COMMENT_ON_PR, REVIEW_COMMENTS, GITHUB_*, COMMENT_MARKER
+ *
+ * Review line comments are replaced each run: previous bot comments that carry
+ * the review marker are deleted first so re-runs do not stack duplicates.
  */
 import fs from 'node:fs';
 import path from 'node:path';
+
+const REVIEW_COMMENT_MARKER = '<!-- winccoa-logs-to-pr-review-line -->';
 
 function mustReadJson(p) {
   return JSON.parse(fs.readFileSync(p, 'utf8'));
@@ -16,6 +21,13 @@ function eventPayload() {
   const p = process.env.GITHUB_EVENT_PATH;
   if (!p || !fs.existsSync(p)) return null;
   return JSON.parse(fs.readFileSync(p, 'utf8'));
+}
+
+function isBotUser(user) {
+  if (!user) return false;
+  if (user.type === 'Bot') return true;
+  const login = String(user.login || '');
+  return login.endsWith('[bot]') || login === 'github-actions';
 }
 
 async function gh(method, urlPath, body) {
@@ -183,6 +195,7 @@ function escapeCell(s) {
 
 function reviewBodyForFinding(f) {
   const parts = [
+    REVIEW_COMMENT_MARKER,
     `**${f.severity || 'WARNING'}** (WinCC OA)`,
     '',
     findingDisplayMessage(f),
@@ -202,6 +215,66 @@ function reviewBodyForFinding(f) {
   return parts.join('\n');
 }
 
+function isOurReviewComment(comment) {
+  if (!isBotUser(comment?.user)) return false;
+  const body = String(comment.body || '');
+  if (body.includes(REVIEW_COMMENT_MARKER)) return true;
+  // Legacy comments from before the marker existed
+  return (
+    body.includes('**WARNING** (WinCC OA)') ||
+    body.includes('**SEVERE** (WinCC OA)') ||
+    body.includes('**FATAL** (WinCC OA)') ||
+    body.includes('Automated WinCC OA log findings') ||
+    body.includes('Log location: line')
+  );
+}
+
+async function listAllPullReviewComments(owner, repo, pullNumber) {
+  const all = [];
+  let page = 1;
+  while (page <= 20) {
+    const batch = await gh(
+      'GET',
+      `/repos/${owner}/${repo}/pulls/${pullNumber}/comments?per_page=100&page=${page}`,
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all.push(...batch);
+    if (batch.length < 100) break;
+    page += 1;
+  }
+  return all;
+}
+
+/**
+ * Delete previous bot review comments from this action so re-runs do not stack.
+ */
+async function deletePreviousReviewComments(owner, repo, pullNumber) {
+  const existing = await listAllPullReviewComments(owner, repo, pullNumber);
+  const ours = existing.filter(isOurReviewComment);
+  if (ours.length === 0) {
+    console.log('No previous automated review comments to replace');
+    return 0;
+  }
+  let deleted = 0;
+  for (const c of ours) {
+    try {
+      await gh(
+        'DELETE',
+        `/repos/${owner}/${repo}/pulls/comments/${c.id}`,
+      );
+      deleted += 1;
+    } catch (err) {
+      console.log(
+        `::warning::Could not delete review comment ${c.id} (${err.message})`,
+      );
+    }
+  }
+  console.log(
+    `Deleted ${deleted}/${ours.length} previous automated review comment(s)`,
+  );
+  return deleted;
+}
+
 async function upsertIssueComment(owner, repo, issueNumber, body, marker) {
   const comments = await gh(
     'GET',
@@ -209,8 +282,7 @@ async function upsertIssueComment(owner, repo, issueNumber, body, marker) {
   );
   const existing = (comments || []).find(
     (c) =>
-      (c.user?.type === 'Bot' || c.user?.login?.endsWith('[bot]')) &&
-      String(c.body || '').includes(marker),
+      isBotUser(c.user) && String(c.body || '').includes(marker),
   );
   if (existing) {
     await gh('PATCH', `/repos/${owner}/${repo}/issues/comments/${existing.id}`, {
@@ -228,12 +300,16 @@ async function upsertIssueComment(owner, repo, issueNumber, body, marker) {
 }
 
 async function createReview(owner, repo, pullNumber, commitId, findings) {
+  // Always clear previous automated line comments first (including when
+  // findings is empty, so fixed issues do not leave stale comments).
+  await deletePreviousReviewComments(owner, repo, pullNumber);
+
   const comments = [];
   const seen = new Set();
   for (const f of findings) {
     if (!f.file || f.file === '(no-file)' || f.line == null) continue;
     if (f.ignored) continue;
-    const key = `${f.file}:${f.line}:${f.message}`;
+    const key = `${f.file}:${f.line}:${String(f.message || '').slice(0, 80)}`;
     if (seen.has(key)) continue;
     seen.add(key);
     comments.push({
@@ -264,7 +340,7 @@ async function createReview(owner, repo, pullNumber, commitId, findings) {
       {
         commit_id: commitId,
         event: 'COMMENT',
-        body: 'Automated WinCC OA log findings (line comments).',
+        body: `${REVIEW_COMMENT_MARKER}\nAutomated WinCC OA log findings (line comments).`,
         comments: batch,
       },
     );
