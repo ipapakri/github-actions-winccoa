@@ -45,6 +45,23 @@ run_style_cli() {
   local project_path="$1"
   local source_path="${2:-}"
 
+  # CTL getFileNamesRecursive needs full absolute paths (not CWD-relative).
+  if command -v realpath >/dev/null 2>&1; then
+    project_path="$(realpath "${project_path}")"
+    if [ -n "${source_path}" ]; then
+      source_path="$(realpath "${source_path}")"
+    fi
+  else
+    project_path="$(cd "${project_path}" && pwd -P)"
+    if [ -n "${source_path}" ]; then
+      if [ -d "${source_path}" ]; then
+        source_path="$(cd "${source_path}" && pwd -P)"
+      else
+        source_path="$(cd "$(dirname "${source_path}")" && pwd -P)/$(basename "${source_path}")"
+      fi
+    fi
+  fi
+
   ensure_node
   local workdir
   workdir="$(mktemp -d)"
