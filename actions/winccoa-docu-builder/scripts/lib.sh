@@ -185,6 +185,28 @@ extract_and_annotate_warnings() {
     echo "::notice::Found doxygen stdout log at ${doxygen_stdout}"
   fi
 
+  # Stage doxygen configs next to warning/log artifacts for easier upload/debug.
+  # OA writes the merged config to data/projectDocu/doxygenConfig.txt and may
+  # append advanced_doxygenConfig.txt when GlobalStorage doxygen/advancedConfig=1.
+  local project_docu="${project_path_norm}/data/projectDocu"
+  local artifact_dir
+  artifact_dir="$(dirname "${warning_file}")"
+  mkdir -p "${artifact_dir}"
+  if [ -f "${project_docu}/advanced_doxygenConfig.txt" ]; then
+    cp -f "${project_docu}/advanced_doxygenConfig.txt" \
+      "${artifact_dir}/advanced_doxygenConfig.txt" || true
+    echo "::notice::Staged advanced doxygen config at ${artifact_dir}/advanced_doxygenConfig.txt"
+  else
+    echo "::warning::advanced_doxygenConfig.txt not found under ${project_docu}"
+  fi
+  if [ -f "${project_docu}/doxygenConfig.txt" ]; then
+    cp -f "${project_docu}/doxygenConfig.txt" \
+      "${artifact_dir}/doxygenConfig.txt" || true
+    echo "::notice::Staged merged doxygen config at ${artifact_dir}/doxygenConfig.txt"
+  else
+    echo "::warning::Merged doxygenConfig.txt not found under ${project_docu} (docs build may not have written it)"
+  fi
+
   local warning_count
   warning_count="$(wc -l < "${warning_file}" | tr -d '[:space:]')"
   if [ -z "${warning_count}" ]; then
