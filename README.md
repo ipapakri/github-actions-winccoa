@@ -113,6 +113,23 @@ Runs WinCC OA syntax validation (npm package) and writes a classic log for PR re
     docker-image: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
 ```
 
+### winccoa-style-check
+
+Runs CTL style check/format via
+`@winccoa-tools-pack/npm-winccoa-ctrl-code-style` (worker + StyleCheck model)
+and writes a classic log for PR reporting.
+
+```yaml
+- id: style
+  uses: winccoa-tools-pack/github-actions-winccoa/actions/winccoa-style-check@main
+  with:
+    path: src/Squirt
+    source-path: src/Squirt/scripts
+    winccoa-version: '3.21'
+    docker-image: ghcr.io/winccoa-tools-pack/winccoa:v3.21.3-debian12-all
+    package-version: '0.1.1'
+```
+
 ### project-metadata
 
 Normalizes project and config paths for downstream workflow steps.

@@ -1,0 +1,111 @@
+name: "WinCC OA CTL Style Check"
+description: >-
+  Check or format WinCC OA CTL sources via
+  @winccoa-tools-pack/npm-winccoa-ctrl-code-style (worker + StyleCheck model)
+author: "winccoa-tools-pack"
+
+inputs:
+  path:
+    description: >-
+      Path to the runnable WinCC OA worker / source project root relative to the
+      repository root (e.g. src/Squirt)
+    required: false
+    default: "."
+
+  source-path:
+    description: >-
+      Optional CTL tree to scan relative to the repository root (CLI -s).
+      Defaults to the worker project path when empty.
+    required: false
+    default: ""
+
+  command:
+    description: "Operation: check (dry-run) or format (in place)"
+    required: false
+    default: "check"
+
+  fail-on-error:
+    description: "Fail the job when the style operation fails"
+    required: false
+    default: "true"
+
+  winccoa-version:
+    description: "WinCC OA version installed in the image/host, for example 3.21"
+    required: true
+
+  languages:
+    description: >-
+      Optional newline- or space-separated list of languages for worker project
+      registration. Default is en_US.utf8.
+    required: false
+    default: "en_US.utf8"
+
+  docker-image:
+    description: >-
+      Optional container image that contains WinCC OA. When set, registration and
+      style check run inside the same image instance. When empty, the action
+      runs on the current runner/container host.
+    required: false
+    default: ""
+
+  register-project:
+    description: >-
+      When true (default), the package registers StyleCheck (non-runnable) and
+      the worker project (runnable, StyleCheck as sub-project) before running.
+      Set false only when that registration was already done.
+    required: false
+    default: "true"
+
+  timeout-ms:
+    description: "Timeout in milliseconds for the WCCOActrl process"
+    required: false
+    default: "120000"
+
+  package-version:
+    description: >-
+      Version or dist-tag of @winccoa-tools-pack/npm-winccoa-ctrl-code-style
+      (for example 0.1.1 or latest). Do not use git refs such as main.
+    required: false
+    default: "0.1.1"
+
+  log-path:
+    description: >-
+      Where to write the captured WCCOActrl/style log (relative to workspace).
+      Consumed by winccoa-logs-to-pr-review.
+    required: false
+    default: ".artifacts/style-check.log"
+
+  node-version:
+    description: "Node.js major version installed when the environment has no Node"
+    required: false
+    default: "22"
+
+outputs:
+  exit-code:
+    description: "Process exit code from the style CLI"
+    value: ${{ steps.run.outputs.exit-code }}
+  log-path:
+    description: "Path to the captured style-check log file"
+    value: ${{ steps.run.outputs.log-path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run CTL style check via public npm package
+      id: run
+      shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PROJECT_PATH: ${{ inputs.path }}
+        SOURCE_PATH: ${{ inputs.source-path }}
+        COMMAND: ${{ inputs.command }}
+        FAIL_ON_ERROR: ${{ inputs.fail-on-error }}
+        OA_VERSION: ${{ inputs.winccoa-version }}
+        DOCKER_IMAGE: ${{ inputs.docker-image }}
+        REGISTER_PROJECT: ${{ inputs.register-project }}
+        TIMEOUT_MS: ${{ inputs.timeout-ms }}
+        PACKAGE_VERSION: ${{ inputs.package-version }}
+        NODE_VERSION: ${{ inputs.node-version }}
+        LANGUAGES: ${{ inputs.languages }}
+        LOG_PATH: ${{ inputs.log-path }}
+      run: bash "${{ github.action_path }}/scripts/run.sh"
