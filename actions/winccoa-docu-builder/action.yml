@@ -58,8 +58,10 @@ inputs:
 
   package-version:
     description: >-
-      Version or dist-tag of @winccoa-tools-pack/npm-winccoa-docu-builder
-      (for example 0.1.0 or latest). Do not use git refs such as main.
+      npm version/dist-tag of @winccoa-tools-pack/npm-winccoa-docu-builder
+      (e.g. 0.1.0 or latest), or a full install spec for bootstrap
+      (e.g. github:winccoa-tools-pack/npm-winccoa-docu-builder#ref).
+      Do not use bare "main".
     required: false
     default: "0.1.0"
 

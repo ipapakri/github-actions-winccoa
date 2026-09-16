@@ -15,8 +15,14 @@ if [ -z "${OA_VERSION:-}" ]; then
   exit 2
 fi
 
-if [ -z "${PACKAGE_VERSION:-}" ] || [ "${PACKAGE_VERSION}" = "main" ]; then
-  echo "::error::package-version must be a published npm version or dist-tag (not main)"
+if [ -z "${PACKAGE_VERSION:-}" ]; then
+  echo "::error::package-version is required"
+  exit 2
+fi
+
+# Bare "main" is ambiguous and was a common footgun with style-check.
+if [ "${PACKAGE_VERSION}" = "main" ]; then
+  echo "::error::package-version must not be bare 'main'. Use a semver, dist-tag, or full git spec (github:owner/repo#ref)."
   exit 2
 fi
 
@@ -24,7 +30,15 @@ PROJECT_PATH_NORM="$(normalize_rel_path "${PROJECT_PATH:-.}")"
 COMPANY_NAME="$(resolve_company_name "${COMPANY_NAME_INPUT:-}")"
 
 PKG_NAME="@winccoa-tools-pack/npm-winccoa-docu-builder"
-export PKG_SPEC="${PKG_NAME}@${PACKAGE_VERSION}"
+# npm version/dist-tag OR full install spec (github:..., git+https://...)
+if [[ "${PACKAGE_VERSION}" == github:* ]] \
+  || [[ "${PACKAGE_VERSION}" == git+* ]] \
+  || [[ "${PACKAGE_VERSION}" == http://* ]] \
+  || [[ "${PACKAGE_VERSION}" == https://* ]]; then
+  export PKG_SPEC="${PACKAGE_VERSION}"
+else
+  export PKG_SPEC="${PKG_NAME}@${PACKAGE_VERSION}"
+fi
 
 HOST_PROJ_PATH="${GITHUB_WORKSPACE}/${PROJECT_PATH_NORM}"
 CONTAINER_PROJ_PATH="/workspace/${PROJECT_PATH_NORM}"

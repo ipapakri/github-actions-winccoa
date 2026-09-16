@@ -31,7 +31,7 @@ Uses the **worker + DocuBuilder** model:
 | `docker-image` | No | empty | Optional WinCC OA container image |
 | `register-project` | No | `true` | Let the package register DocuBuilder + worker |
 | `timeout-ms` | No | `600000` | WCCOActrl timeout in milliseconds |
-| `package-version` | No | `0.1.0` | npm version/dist-tag for docu-builder |
+| `package-version` | No | `0.1.0` | npm version/dist-tag, or `github:owner/repo#ref` bootstrap spec |
 | `log-path` | No | `.artifacts/docu-builder.log` | Captured log path |
 | `warning-output-file` | No | `.artifacts/doxygen-warnings.txt` | Extracted warnings file |
 | `annotate-warnings` | No | `true` | Emit GitHub warning annotations |
@@ -88,6 +88,17 @@ jobs:
           package-version: '0.1.0'
           max-warning-count: '-1'
 ```
+
+## Bootstrap before npm publish
+
+Until `@winccoa-tools-pack/npm-winccoa-docu-builder` is published, you can pass a
+git install spec:
+
+```yaml
+package-version: 'github:winccoa-tools-pack/npm-winccoa-docu-builder#feature/initial-docu-builder'
+```
+
+After the first npm release, switch back to a semver such as `0.1.0`.
 
 ## Scope notes
 

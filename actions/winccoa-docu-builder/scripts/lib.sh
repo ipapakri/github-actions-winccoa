@@ -98,10 +98,29 @@ run_docu_cli() {
   npm install --silent --no-fund --no-audit "${PKG_SPEC}"
 
   local pkg_root="${workdir}/node_modules/@winccoa-tools-pack/npm-winccoa-docu-builder"
+  # Git installs may land under a different folder name; resolve via package name.
+  if [ ! -d "${pkg_root}" ]; then
+    pkg_root="$(node -p "try{require('path').dirname(require.resolve('@winccoa-tools-pack/npm-winccoa-docu-builder/package.json'))}catch(e){''}" 2>/dev/null || true)"
+  fi
+  if [ -z "${pkg_root}" ] || [ ! -d "${pkg_root}" ]; then
+    echo "::error::Could not locate installed @winccoa-tools-pack/npm-winccoa-docu-builder under ${workdir}"
+    find "${workdir}/node_modules" -maxdepth 3 -type d 2>/dev/null || true
+    exit 2
+  fi
+
   local entry="${pkg_root}/dist/cjs/cli.js"
   if [ ! -f "${entry}" ]; then
-    echo "::error::Missing CLI entry ${entry}"
+    echo "dist/cjs/cli.js missing (likely git install); building package in place"
+    (
+      cd "${pkg_root}"
+      npm install --silent --no-fund --no-audit --include=dev
+      npm run build
+    )
+  fi
+  if [ ! -f "${entry}" ]; then
+    echo "::error::Missing CLI entry ${entry} after build"
     ls -la "${pkg_root}" || true
+    ls -la "${pkg_root}/dist" || true
     exit 2
   fi
 
