@@ -7,8 +7,10 @@ Uses the **worker + DocuBuilder** model:
 
 1. Register bundled **DocuBuilder** as a non-runnable sub-project
 2. Register the **worker / source project** as runnable with DocuBuilder attached
-3. Run `WCCOActrl -config <worker>/config/config ... buildHelp.ctl <CompanyName>`
-4. Extract doxygen warnings, emit PR annotations, optionally enforce a max count
+3. Optionally merge external **projectDocu** directories into
+   `<path>/data/projectDocu`
+4. Run `WCCOActrl -config <worker>/config/config ... buildHelp.ctl <CompanyName>`
+5. Extract doxygen warnings, emit PR annotations, optionally enforce a max count
 
 ## Runtime and compatibility
 
@@ -28,10 +30,11 @@ Uses the **worker + DocuBuilder** model:
 | `fail-on-error` | No | `true` | Fail the job when docs build fails |
 | `winccoa-version` | Yes | - | Installed WinCC OA version such as `3.21` |
 | `languages` | No | `en_US.utf8` | Locales for worker registration |
+| `project-docu-paths` | No | empty | Multi-line external projectDocu dirs (theme → project) |
 | `docker-image` | No | empty | Optional WinCC OA container image |
 | `register-project` | No | `true` | Let the package register DocuBuilder + worker |
 | `timeout-ms` | No | `600000` | WCCOActrl timeout in milliseconds |
-| `package-version` | No | `0.1.0` | npm version/dist-tag, or `github:owner/repo#ref` bootstrap spec |
+| `package-version` | No | `0.2.0` | npm version/dist-tag, or `github:owner/repo#ref` bootstrap spec |
 | `log-path` | No | `.artifacts/docu-builder.log` | Captured log path |
 | `warning-output-file` | No | `.artifacts/doxygen-warnings.txt` | Extracted warnings file |
 | `annotate-warnings` | No | `true` | Emit GitHub warning annotations |
@@ -39,6 +42,24 @@ Uses the **worker + DocuBuilder** model:
 | `max-annotations` | No | `200` | Cap for annotations |
 | `install-doxygen` | No | `true` | apt-get install doxygen/graphviz when missing |
 | `node-version` | No | `22` | Node major when bootstrapping Node |
+
+### `project-docu-paths`
+
+Ordered list of directories (relative to the repository root) whose **top-level
+files** are merged into `<path>/data/projectDocu` before the build:
+
+- `advanced_doxygenConfig.txt` fragments are **concatenated** (later keys win)
+- other files (`extra_header.html`, `extra_stylesheet.css`, …) use **last-wins**
+
+Typical layering:
+
+```yaml
+project-docu-paths: |
+  .doxygen-awesome-css
+  .winccoa-docu-builder
+```
+
+Requires package **0.2.0+** (or a git bootstrap that includes `--project-docu`).
 
 ## Outputs
 
@@ -85,7 +106,10 @@ jobs:
           winccoa-version: '3.21'
           docker-image: ${{ env.WINCCOA_IMAGE }}
           company-name: winccoa-tools-pack
-          package-version: '0.1.0'
+          project-docu-paths: |
+            .doxygen-awesome-css
+            .winccoa-docu-builder
+          package-version: '0.2.0'
           max-warning-count: '-1'
 ```
 
@@ -98,7 +122,7 @@ git install spec:
 package-version: 'github:winccoa-tools-pack/npm-winccoa-docu-builder#feature/initial-docu-builder'
 ```
 
-After the first npm release, switch back to a semver such as `0.1.0`.
+After the first npm release, switch back to a semver such as `0.2.0`.
 
 ## Scope notes
 
@@ -106,12 +130,18 @@ After the first npm release, switch back to a semver such as `0.1.0`.
 - Test-suite source documentation can be added later.
 - Annotations map `file:line[:col]: message` style doxygen lines onto PR files
   when paths are present in the warning text.
-- After a successful build, the action stages doxygen configs next to
-  `warning-output-file` for artifact upload/debug:
+- Warning extraction order:
+  1. `<path>/log/doxygen_warn_logfile.txt` (`WARN_LOGFILE` from advanced config)
+  2. `<path>/log/doxygen_stdErr.txt`
+  3. `<path>/log/doxygen_stdOut.txt`
+  4. process output fallback
+- After a successful build, the action stages debug files next to
+  `warning-output-file` for artifact upload:
   - `advanced_doxygenConfig.txt` (user/advanced fragment from
     `<path>/data/projectDocu/`)
   - `doxygenConfig.txt` (merged config written by WinCC OA
     `DoxygenConfig::create()`)
+  - `doxygen_warn_logfile.txt` when `WARN_LOGFILE` was produced
 
 ---
 

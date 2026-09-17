@@ -70,8 +70,10 @@ if [ -n "${DOCKER_IMAGE:-}" ]; then
     -e PKG_SPEC="${PKG_SPEC}" \
     -e REGISTER_PROJECT="${REGISTER_PROJECT:-true}" \
     -e LANGUAGES="${LANGUAGES:-en_US.utf8}" \
+    -e PROJECT_DOCU_PATHS="${PROJECT_DOCU_PATHS:-}" \
     -e COMPANY_NAME="${COMPANY_NAME}" \
     -e INSTALL_DOXYGEN="${INSTALL_DOXYGEN:-true}" \
+    -e GITHUB_WORKSPACE="/workspace" \
     -e PROJECT_PATH_IN_CONTAINER="${CONTAINER_PROJ_PATH}" \
     "${DOCKER_IMAGE}" \
     bash /action/scripts/run-in-container.sh 2>&1)
