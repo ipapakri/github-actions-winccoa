@@ -13,6 +13,26 @@ normalize_langs() {
   printf '%s\n' "$1" | tr '\n' ' ' | xargs | tr ' ' ','
 }
 
+# Expand multi-line / space / comma project-docu-paths into newline-separated abs paths.
+# Paths are resolved relative to GITHUB_WORKSPACE when set, else cwd.
+expand_project_docu_paths() {
+  local raw="${1:-}"
+  local base="${GITHUB_WORKSPACE:-.}"
+  if [ -z "${raw//[[:space:]]/}" ]; then
+    return 0
+  fi
+  # shellcheck disable=SC2001
+  printf '%s\n' "${raw}" | tr ',;' '\n' | while IFS= read -r line || [ -n "${line}" ]; do
+    line="$(echo "${line}" | xargs)"
+    [ -z "${line}" ] && continue
+    if [[ "${line}" = /* ]]; then
+      printf '%s\n' "${line}"
+    else
+      printf '%s\n' "${base}/${line#./}"
+    fi
+  done
+}
+
 resolve_company_name() {
   local input="${1:-}"
   if [ -n "${input}" ]; then
@@ -143,6 +163,13 @@ run_docu_cli() {
   if [ "${REGISTER_PROJECT:-true}" != "true" ]; then
     args+=(--no-register)
   fi
+
+  # Multi-value projectDocu roots (workspace-relative or absolute).
+  local docu_path
+  while IFS= read -r docu_path || [ -n "${docu_path}" ]; do
+    [ -z "${docu_path}" ] && continue
+    args+=(--project-docu "${docu_path}")
+  done < <(expand_project_docu_paths "${PROJECT_DOCU_PATHS:-}")
 
   echo "Running: node ${entry} ${args[*]}"
   node "${entry}" "${args[@]}"

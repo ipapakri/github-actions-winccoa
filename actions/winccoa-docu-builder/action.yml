@@ -35,6 +35,16 @@ inputs:
     required: false
     default: "en_US.utf8"
 
+  project-docu-paths:
+    description: >-
+      Optional multi-line (or space/comma-separated) list of external projectDocu
+      directories relative to the repository root. Merged into
+      <path>/data/projectDocu before the build (left → right: advanced config
+      concatenates; other files last-wins). Example: org theme then project
+      .winccoa-docu-builder overrides.
+    required: false
+    default: ""
+
   docker-image:
     description: >-
       Optional container image that contains WinCC OA. When set, registration and
@@ -59,11 +69,11 @@ inputs:
   package-version:
     description: >-
       npm version/dist-tag of @winccoa-tools-pack/npm-winccoa-docu-builder
-      (e.g. 0.1.0 or latest), or a full install spec for bootstrap
+      (e.g. 0.2.0 or latest), or a full install spec for bootstrap
       (e.g. github:winccoa-tools-pack/npm-winccoa-docu-builder#ref).
       Do not use bare "main".
     required: false
-    default: "0.1.0"
+    default: "0.2.0"
 
   log-path:
     description: >-
@@ -135,6 +145,7 @@ runs:
         PACKAGE_VERSION: ${{ inputs.package-version }}
         NODE_VERSION: ${{ inputs.node-version }}
         LANGUAGES: ${{ inputs.languages }}
+        PROJECT_DOCU_PATHS: ${{ inputs.project-docu-paths }}
         LOG_PATH: ${{ inputs.log-path }}
         WARNING_OUTPUT_FILE: ${{ inputs.warning-output-file }}
         ANNOTATE_WARNINGS: ${{ inputs.annotate-warnings }}
