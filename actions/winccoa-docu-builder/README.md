@@ -34,7 +34,7 @@ Uses the **worker + DocuBuilder** model:
 | `docker-image` | No | empty | Optional WinCC OA container image |
 | `register-project` | No | `true` | Let the package register DocuBuilder + worker |
 | `timeout-ms` | No | `600000` | WCCOActrl timeout in milliseconds |
-| `package-version` | No | `0.2.0` | npm version/dist-tag, or `github:owner/repo#ref` bootstrap spec |
+| `package-version` | No | `0.2.1` | npm version/dist-tag, or `github:owner/repo#ref` bootstrap spec |
 | `log-path` | No | `.artifacts/docu-builder.log` | Captured log path |
 | `warning-output-file` | No | `.artifacts/doxygen-warnings.txt` | Extracted warnings file |
 | `annotate-warnings` | No | `true` | Emit GitHub warning annotations |
@@ -59,7 +59,7 @@ project-docu-paths: |
   .winccoa-docu-builder
 ```
 
-Requires package **0.2.0+** (or a git bootstrap that includes `--project-docu`).
+Requires package **0.2.1+** (or a git bootstrap that includes `--project-docu`).
 
 ## Outputs
 
@@ -109,7 +109,7 @@ jobs:
           project-docu-paths: |
             .doxygen-awesome-css
             .winccoa-docu-builder
-          package-version: '0.2.0'
+          package-version: '0.2.1'
           max-warning-count: '-1'
 ```
 
@@ -122,7 +122,7 @@ git install spec:
 package-version: 'github:winccoa-tools-pack/npm-winccoa-docu-builder#feature/initial-docu-builder'
 ```
 
-After the first npm release, switch back to a semver such as `0.2.0`.
+After the fix release, switch back to a semver such as `0.2.1`.
 
 ## Scope notes
 
