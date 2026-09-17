@@ -5,7 +5,6 @@ Executes WinCC OA tests using the WinCC OA TestFramework with automatic jUnit re
 ## Inputs
 
 | Input | Required | Default | Description |
-
 | ------- | ---------- | --------- | ------------- |
 | `winccoa-test-path` | yes | - | Path to the test sources based on WinCC OA TestFramework struct (e.g., `tests/WinCC_OA_Test`) |
 | `test-run-id` | yes | - | Unique test run identifier (e.g., `Squirt-regression`) |
