@@ -158,34 +158,68 @@ extract_and_annotate_warnings() {
   local log_dir="${project_path_norm}/log"
   local doxygen_stderr="${log_dir}/doxygen_stdErr.txt"
   local doxygen_stdout="${log_dir}/doxygen_stdOut.txt"
+  # Preferred durable path when advanced config sets WARN_LOGFILE via $PROJ_PATH.
+  local doxygen_warn_logfile="${log_dir}/doxygen_warn_logfile.txt"
+  local warning_pattern='[Ww]arning:|\bWARNING\b|\bSEVERE\b|\bFATAL\b'
+  local warning_source=""
 
-  if [ -f "${doxygen_stderr}" ]; then
-    echo "::notice::Found doxygen stderr log at ${doxygen_stderr}"
-    local stderr_total
-    stderr_total="$(wc -l < "${doxygen_stderr}" | tr -d '[:space:]')"
+  : > "${warning_file}"
+
+  collect_warnings_from() {
+    local src="$1"
+    local label="$2"
+    if [ ! -f "${src}" ]; then
+      return 1
+    fi
+    local total
+    total="$(wc -l < "${src}" | tr -d '[:space:]')"
     local preview=120
-    echo "::group::Doxygen stderr preview (${stderr_total} lines total, showing up to ${preview})"
-    sed -n "1,${preview}p" "${doxygen_stderr}" || true
-    if [ "${stderr_total}" -gt "${preview}" ]; then
+    echo "::notice::Found ${label} at ${src} (${total} lines)"
+    echo "::group::${label} preview (${total} lines total, showing up to ${preview})"
+    sed -n "1,${preview}p" "${src}" || true
+    if [ "${total}" -gt "${preview}" ]; then
       echo "... truncated ..."
     fi
     echo "::endgroup::"
-
-    grep -E "[Ww]arning:|\bWARNING\b|\bSEVERE\b|\bFATAL\b" "${doxygen_stderr}" > "${warning_file}" || true
-
-    if [ ! -s "${warning_file}" ] && [ -f "${doxygen_stdout}" ]; then
-      echo "::notice::No warnings in stderr; falling back to doxygen stdout at ${doxygen_stdout}"
-      grep -E "[Ww]arning:|\bWARNING\b|\bSEVERE\b|\bFATAL\b" "${doxygen_stdout}" > "${warning_file}" || true
+    grep -E "${warning_pattern}" "${src}" > "${warning_file}" || true
+    if [ -s "${warning_file}" ]; then
+      warning_source="${src}"
+      return 0
     fi
-  else
-    printf '%s\n' "${output_text}" | grep -E "[Ww]arning:|\bWARNING\b|\bSEVERE\b|\bFATAL\b" > "${warning_file}" || true
+    # Non-empty WARN_LOGFILE with no pattern match still counts as the warning source
+    # (doxygen often writes plain warning lines without a WARNING token).
+    if [ "${label}" = "doxygen WARN_LOGFILE" ] && [ -s "${src}" ]; then
+      cp -f "${src}" "${warning_file}" || true
+      warning_source="${src}"
+      return 0
+    fi
+    return 1
+  }
+
+  # Prefer WARN_LOGFILE (advanced config), then OA stderr capture, then stdout, then process output.
+  if ! collect_warnings_from "${doxygen_warn_logfile}" "doxygen WARN_LOGFILE"; then
+    if ! collect_warnings_from "${doxygen_stderr}" "doxygen stderr log"; then
+      if ! collect_warnings_from "${doxygen_stdout}" "doxygen stdout log"; then
+        printf '%s\n' "${output_text}" | grep -E "${warning_pattern}" > "${warning_file}" || true
+        if [ -s "${warning_file}" ]; then
+          warning_source="process-output"
+          echo "::notice::Extracted warnings from process output fallback"
+        fi
+      fi
+    fi
   fi
 
-  if [ -f "${doxygen_stdout}" ]; then
+  if [ -n "${warning_source}" ]; then
+    echo "::notice::Warning source selected: ${warning_source}"
+  else
+    echo "::notice::No doxygen warning lines found in WARN_LOGFILE/stderr/stdout/process output"
+  fi
+
+  if [ -f "${doxygen_stdout}" ] && [ "${warning_source}" != "${doxygen_stdout}" ]; then
     echo "::notice::Found doxygen stdout log at ${doxygen_stdout}"
   fi
 
-  # Stage doxygen configs next to warning/log artifacts for easier upload/debug.
+  # Stage doxygen configs and warn logfile next to warning/log artifacts.
   # OA writes the merged config to data/projectDocu/doxygenConfig.txt and may
   # append advanced_doxygenConfig.txt when GlobalStorage doxygen/advancedConfig=1.
   local project_docu="${project_path_norm}/data/projectDocu"
@@ -205,6 +239,11 @@ extract_and_annotate_warnings() {
     echo "::notice::Staged merged doxygen config at ${artifact_dir}/doxygenConfig.txt"
   else
     echo "::warning::Merged doxygenConfig.txt not found under ${project_docu} (docs build may not have written it)"
+  fi
+  if [ -f "${doxygen_warn_logfile}" ]; then
+    cp -f "${doxygen_warn_logfile}" \
+      "${artifact_dir}/doxygen_warn_logfile.txt" || true
+    echo "::notice::Staged WARN_LOGFILE at ${artifact_dir}/doxygen_warn_logfile.txt"
   fi
 
   local warning_count

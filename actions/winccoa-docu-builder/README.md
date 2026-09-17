@@ -106,12 +106,18 @@ After the first npm release, switch back to a semver such as `0.1.0`.
 - Test-suite source documentation can be added later.
 - Annotations map `file:line[:col]: message` style doxygen lines onto PR files
   when paths are present in the warning text.
-- After a successful build, the action stages doxygen configs next to
-  `warning-output-file` for artifact upload/debug:
+- Warning extraction order:
+  1. `<path>/log/doxygen_warn_logfile.txt` (`WARN_LOGFILE` from advanced config)
+  2. `<path>/log/doxygen_stdErr.txt`
+  3. `<path>/log/doxygen_stdOut.txt`
+  4. process output fallback
+- After a successful build, the action stages debug files next to
+  `warning-output-file` for artifact upload:
   - `advanced_doxygenConfig.txt` (user/advanced fragment from
     `<path>/data/projectDocu/`)
   - `doxygenConfig.txt` (merged config written by WinCC OA
     `DoxygenConfig::create()`)
+  - `doxygen_warn_logfile.txt` when `WARN_LOGFILE` was produced
 
 ---
 
