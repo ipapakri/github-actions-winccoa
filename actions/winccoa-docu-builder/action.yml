@@ -69,11 +69,11 @@ inputs:
   package-version:
     description: >-
       npm version/dist-tag of @winccoa-tools-pack/npm-winccoa-docu-builder
-      (e.g. 0.2.0 or latest), or a full install spec for bootstrap
+      (e.g. 0.2.1 or latest), or a full install spec for bootstrap
       (e.g. github:winccoa-tools-pack/npm-winccoa-docu-builder#ref).
       Do not use bare "main".
     required: false
-    default: "0.2.0"
+    default: "0.2.1"
 
   log-path:
     description: >-
