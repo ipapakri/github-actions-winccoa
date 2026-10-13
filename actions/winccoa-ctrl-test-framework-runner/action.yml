@@ -124,6 +124,8 @@ runs:
     - name: Remove WCCOAui managers
       shell: bash
       run: |
+        WINCC_OA_TEST_PATH="${GITHUB_WORKSPACE}/${{ inputs.winccoa-test-path }}"
+        TF_CUSTOMIZED_PATH="${WINCC_OA_TEST_PATH}/Projects/TfCustomizedSquirt"
         PROGS_FILE="${TF_CUSTOMIZED_PATH}/config/progs"
         sed -i '/^WCCOAui\b/d' ${PROGS_FILE}
         cat config/progs   # optional: show the result in the log
