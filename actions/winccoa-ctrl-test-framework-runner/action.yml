@@ -125,9 +125,8 @@ runs:
       shell: bash
       run: |
         set -euo pipefail
-        WINCC_OA_TEST_PATH="${GITHUB_WORKSPACE}/${{ inputs.winccoa-test-path }}"
-        TF_CUSTOMIZED_PATH="${WINCC_OA_TEST_PATH}/Projects/TfCustomizedSquirt"
-        PROGS_FILE="${TF_CUSTOMIZED_PATH}/config/progs"
+        PROGS_FILE="/opt/WinCC_OA/${WINCCOA_VERSION}/config/progs"
+        cat ${PROGS_FILE}   # optional: show the result in the log
         sed -i '/^WCCOAui\b/d' ${PROGS_FILE}
         cat ${PROGS_FILE}   # optional: show the result in the log
 
