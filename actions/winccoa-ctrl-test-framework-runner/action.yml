@@ -121,6 +121,13 @@ runs:
           exit 1
         fi
 
+    - name: Remove WCCOAui managers
+      shell: bash
+      run: |
+        PROGS_FILE="${TF_CUSTOMIZED_PATH}/config/progs"
+        sed -i '/^WCCOAui\b/d' ${PROGS_FILE}
+        cat config/progs   # optional: show the result in the log
+
     - name: Ensure test directories exist
       shell: bash
       run: |
