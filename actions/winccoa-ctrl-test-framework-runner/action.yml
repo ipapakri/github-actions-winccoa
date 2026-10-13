@@ -129,7 +129,7 @@ runs:
         TF_CUSTOMIZED_PATH="${WINCC_OA_TEST_PATH}/Projects/TfCustomizedSquirt"
         PROGS_FILE="${TF_CUSTOMIZED_PATH}/config/progs"
         sed -i '/^WCCOAui\b/d' ${PROGS_FILE}
-        cat config/progs   # optional: show the result in the log
+        cat ${PROGS_FILE}   # optional: show the result in the log
 
     - name: Ensure test directories exist
       shell: bash
