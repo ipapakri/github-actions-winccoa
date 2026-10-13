@@ -124,6 +124,7 @@ runs:
     - name: Remove WCCOAui managers
       shell: bash
       run: |
+        set -euo pipefail
         WINCC_OA_TEST_PATH="${GITHUB_WORKSPACE}/${{ inputs.winccoa-test-path }}"
         TF_CUSTOMIZED_PATH="${WINCC_OA_TEST_PATH}/Projects/TfCustomizedSquirt"
         PROGS_FILE="${TF_CUSTOMIZED_PATH}/config/progs"
