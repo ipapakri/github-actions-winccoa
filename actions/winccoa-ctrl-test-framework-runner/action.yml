@@ -123,6 +123,8 @@ runs:
 
     - name: Remove WCCOAui managers
       shell: bash
+      env:
+        WINCCOA_VERSION: ${{ inputs.winccoa-version }}
       run: |
         set -euo pipefail
         PROGS_FILE="/opt/WinCC_OA/${WINCCOA_VERSION}/config/progs"
